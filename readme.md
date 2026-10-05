@@ -7,7 +7,7 @@ StaticMesh voxelization plugin: radius digging, small-cluster culling, `.voxel` 
 - Make: surface → dilate → solid fill → density 0/1
 - Dig: falloff carve on Tick (`DigDuration`); remesh ≤ `RemeshHz`
 - Mesh: Transvoxel
-- Save: flush pending dig → **raw packed bits** (no Oodle); Load reads raw and legacy zip
+- Save: flush pending dig → **raw float Density** (no Oodle); Load reads v2 density + legacy v1 bits/zip
 
 ## Dependencies
 
@@ -67,8 +67,8 @@ Staged: `StagedBuilds/Windows/WinterGame/Saved/Voxels/` (or next to the `.exe`).
 
 ## `.voxel` format
 
-Magic `VGXL`, version 1. New saves: Flags=`0`, raw packed bits.  
-Legacy Flags `& 0x1`: zip/Oodle entry `bits` (read-only).
+Magic `VGXL`, version **2**. New saves: Flags=`0`, raw `float Density[N]`.  
+Legacy v1: packed occupancy bits; Flags `& 0x1`: zip/Oodle entry `bits` (read-only).
 
 ## Build
 

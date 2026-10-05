@@ -24,6 +24,16 @@ void FDG_VoxelGrid::SyncDensityFromOccupancy()
 	}
 }
 
+void FDG_VoxelGrid::SyncOccupancyFromDensity()
+{
+	const int32 N = NumBits();
+	Occupancy.SetNum(N, false);
+	for (int32 I = 0; I < N; ++I)
+	{
+		Occupancy[I] = Density[I] >= 0.5f;
+	}
+}
+
 void FDG_VoxelGrid::DilateSolidOnce()
 {
 	const int32 N = NumBits();
@@ -367,5 +377,29 @@ bool FDG_VoxelGrid::UnpackBits(const uint8* Packed, int32 PackedBytes, int32 Bit
 		}
 	}
 	SyncDensityFromOccupancy();
+	return true;
+}
+
+void FDG_VoxelGrid::PackDensity(TArray<uint8>& OutPacked) const
+{
+	const int32 Bytes = NumBits() * (int32)sizeof(float);
+	OutPacked.SetNumUninitialized(Bytes);
+	if (Bytes > 0)
+	{
+		FMemory::Memcpy(OutPacked.GetData(), Density.GetData(), Bytes);
+	}
+}
+
+bool FDG_VoxelGrid::UnpackDensity(const uint8* Packed, int32 PackedBytes, int32 Count)
+{
+	const int32 Need = Count * (int32)sizeof(float);
+	if (!Packed || Count != NumBits() || PackedBytes < Need)
+	{
+		return false;
+	}
+
+	Density.SetNumUninitialized(Count);
+	FMemory::Memcpy(Density.GetData(), Packed, Need);
+	SyncOccupancyFromDensity();
 	return true;
 }

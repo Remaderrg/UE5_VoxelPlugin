@@ -55,6 +55,7 @@ struct FDG_VoxelGrid
 
 	void Reset(int32 InDimX, int32 InDimY, int32 InDimZ, float InVoxelSize, const FVector& InOrigin);
 	void SyncDensityFromOccupancy();
+	void SyncOccupancyFromDensity();
 	void DilateSolidOnce();
 	void FillInteriorFromSurface();
 	/** Cull solid groups smaller than MinClusterVoxels; OutDirty = cleared voxels. */
@@ -78,6 +79,8 @@ struct FDG_VoxelGrid
 
 	void PackBits(TArray<uint8>& OutPacked) const;
 	bool UnpackBits(const uint8* Packed, int32 PackedBytes, int32 BitCount);
+	void PackDensity(TArray<uint8>& OutPacked) const;
+	bool UnpackDensity(const uint8* Packed, int32 PackedBytes, int32 Count);
 
 private:
 	bool FloodAndMaybeCull(

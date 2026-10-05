@@ -20,7 +20,7 @@ WinterGame/Plugins/
         │   ├── DG_VoxelPlugin.h
         │   ├── DG_VoxelComponent.h     # BP props; PIMPL grid; dig strokes
         │   ├── DG_VoxelBPLibrary.h     # Make / Dig / Save / Load / Reset (Self-resolve)
-        │   ├── DG_VoxelSave.h          # VGXL raw bits (+ legacy zip read)
+        │   ├── DG_VoxelSave.h          # VGXL density f32 v2 (+ legacy bits/zip)
         │   ├── DG_VoxelCVars.h         # dg.voxel.* externs
         │   ├── DG_VoxelDeveloperSettings.h  # Project Settings → UVoxelDeveloperSettings
         │   └── DG_VoxelTransvoxel.h    # Voxel::Transvoxel emitter

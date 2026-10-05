@@ -660,14 +660,14 @@ bool UDG_VoxelComponent::SaveToSlot(const FString& SlotName)
 	FlushPendingDigsImmediate();
 
 	TArray<uint8> Packed;
-	Grid->PackBits(Packed);
+	Grid->PackDensity(Packed);
 	const int32 BitCount = Grid->NumBits();
 
 	TArray<uint8> Bytes;
 	Bytes.Reserve(48 + Packed.Num());
 	DGVoxel::AppendPod(Bytes, DG_VoxelMagic);
 	DGVoxel::AppendPod(Bytes, DG_VoxelFormatVersion);
-	const uint16 Flags = 0; // raw bits — no Oodle dependency
+	const uint16 Flags = 0; // raw density floats
 	DGVoxel::AppendPod(Bytes, Flags);
 	DGVoxel::AppendPod(Bytes, Grid->DimX);
 	DGVoxel::AppendPod(Bytes, Grid->DimY);
@@ -723,7 +723,8 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 	int32 BitCount = 0;
 
 	if (!DGVoxel::ReadPod(Bytes, Off, Magic) || Magic != DG_VoxelMagic
-		|| !DGVoxel::ReadPod(Bytes, Off, Version) || Version != DG_VoxelFormatVersion
+		|| !DGVoxel::ReadPod(Bytes, Off, Version)
+		|| (Version != DG_VoxelFormatVersion && Version != DG_VoxelFormatVersion_Bits)
 		|| !DGVoxel::ReadPod(Bytes, Off, Flags)
 		|| !DGVoxel::ReadPod(Bytes, Off, InDimX)
 		|| !DGVoxel::ReadPod(Bytes, Off, InDimY)
@@ -748,10 +749,13 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 		return false;
 	}
 
-	const int32 PackedBytes = (BitCount + 7) / 8;
+	const bool bDensityV2 = Version == DG_VoxelFormatVersion;
+	const int32 PackedBytes = bDensityV2
+		? BitCount * (int32)sizeof(float)
+		: (BitCount + 7) / 8;
 	TArray<uint8> Packed;
 
-	if (Flags & DG_VoxelFlag_ZipBits)
+	if (!bDensityV2 && (Flags & DG_VoxelFlag_ZipBits))
 	{
 		if (Off >= Bytes.Num())
 		{
@@ -788,7 +792,10 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 	VoxelSize = InVoxelSize;
 	MinClusterVoxels = FMath::Max(1, InMinCluster);
 	Grid->Reset(InDimX, InDimY, InDimZ, InVoxelSize, FVector(Ox, Oy, Oz));
-	if (!Grid->UnpackBits(Packed.GetData(), Packed.Num(), BitCount))
+	const bool bOk = bDensityV2
+		? Grid->UnpackDensity(Packed.GetData(), Packed.Num(), BitCount)
+		: Grid->UnpackBits(Packed.GetData(), Packed.Num(), BitCount);
+	if (!bOk)
 	{
 		VOXEL_MESSAGE(Warning, "LoadFromSlot: unpack failed");
 		return false;
