@@ -76,5 +76,5 @@ Legacy v1: packed occupancy bits; Flags `& 0x1`: zip/Oodle entry `bits` (read-on
 pwsh ./RebuildPlugin.ps1
 ```
 
-Requires sibling `VoxelCore`; builds via `WinterGame.uproject` + UBT.  
+Requires sibling `VoxelCore`; builds via the parent project's `.uproject` + UBT.  
 After Save changes: rebuild the **game** (not just the plugin) and Stage/Package again.

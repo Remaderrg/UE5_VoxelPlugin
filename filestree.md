@@ -5,7 +5,7 @@ WinterGame/Plugins/
 ├── VoxelCore/                          # sibling: https://github.com/VoxelPlugin/VoxelCore
 └── DG_VoxelPlugin/
     ├── DG_VoxelPlugin.uplugin          # ProceduralMeshComponent + VoxelCore
-    ├── RebuildPlugin.ps1               # UBT via WinterGame.uproject
+    ├── RebuildPlugin.ps1               # UBT via sibling .uproject
     ├── readme.md
     ├── filestree.md
     ├── Config/

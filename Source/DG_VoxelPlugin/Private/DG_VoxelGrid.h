@@ -26,10 +26,6 @@ struct FDG_VoxelGrid
 	{
 		return InBounds(X, Y, Z) ? Density[IndexOf(X, Y, Z)] : 0.f;
 	}
-	FORCEINLINE bool GetSolid(int32 X, int32 Y, int32 Z) const
-	{
-		return GetDensity(X, Y, Z) >= 0.5f;
-	}
 	FORCEINLINE void SetSolid(int32 X, int32 Y, int32 Z, bool bSolid)
 	{
 		if (!InBounds(X, Y, Z))
@@ -73,16 +69,20 @@ struct FDG_VoxelGrid
 		float PrevR,
 		float CurrR,
 		const FVoxelFalloff& Falloff,
-		float CarveThreshold,
 		TArray<FIntVector>& OutRemoved,
 		FVoxelOptionalIntBox& OutDirty);
 
-	void PackBits(TArray<uint8>& OutPacked) const;
 	bool UnpackBits(const uint8* Packed, int32 PackedBytes, int32 BitCount);
 	void PackDensity(TArray<uint8>& OutPacked) const;
 	bool UnpackDensity(const uint8* Packed, int32 PackedBytes, int32 Count);
 
 private:
+	void GetRadiusVoxelBounds(
+		const FVector& CenterLocal,
+		float Radius,
+		int32& OutX0, int32& OutY0, int32& OutZ0,
+		int32& OutX1, int32& OutY1, int32& OutZ1) const;
+
 	bool FloodAndMaybeCull(
 		int32 Start,
 		FVoxelBitArray& Visited,

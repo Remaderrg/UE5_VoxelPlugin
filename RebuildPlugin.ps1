@@ -1,18 +1,18 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Очистка и пересборка DG_VoxelPlugin через WinterGame.uproject (Windows / macOS)
+    Clean and rebuild DG_VoxelPlugin via the sibling .uproject (Windows / macOS)
 
- Запуск:
+ Usage:
    pwsh ./RebuildPlugin.ps1
 
- Требует sibling-плагин VoxelCore:
-   WinterGame/Plugins/VoxelCore
+ Requires sibling VoxelCore plugin:
+   <Project>/Plugins/VoxelCore
 
- Собирает модуль через UnrealBuildTool (видит sibling plugins),
- затем копирует Binaries из Intermediate при необходимости.
+ Builds the module through UnrealBuildTool (sees sibling plugins),
+ then copies Binaries from Intermediate when needed.
 
- Переопределение путей (необязательно):
+ Optional path override:
    $env:DG_UE_ENGINE_PATH = "C:\Program Files\Epic Games\UE_5.8\Engine"
    pwsh ./RebuildPlugin.ps1
 #>
@@ -20,7 +20,7 @@
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# ========== Настройки ==========
+# ========== Settings ==========
 $EngineVersion      = "5.8"
 $EnginePathOverride = $env:DG_UE_ENGINE_PATH
 $EditorTarget       = "WinterGameEditor"
@@ -28,6 +28,13 @@ $EditorTarget       = "WinterGameEditor"
 
 function Write-Step([string]$Message) {
 	Write-Host $Message
+}
+
+function Get-UbtScript([string]$EnginePath) {
+	if ($IsWindows) {
+		return Join-Path $EnginePath "Build\BatchFiles\Build.bat"
+	}
+	return Join-Path $EnginePath "Build/BatchFiles/Build.sh"
 }
 
 function Find-EnginePath {
@@ -38,13 +45,9 @@ function Find-EnginePath {
 
 	if ($Override) {
 		$enginePath = $Override.TrimEnd('\', '/')
-		$buildBat = if ($IsWindows) {
-			Join-Path $enginePath "Build\BatchFiles\Build.bat"
-		} else {
-			Join-Path $enginePath "Build/BatchFiles/Build.sh"
-		}
+		$buildBat = Get-UbtScript $enginePath
 		if (-not (Test-Path -LiteralPath $buildBat)) {
-			throw "Движок не найден: $enginePath`nОжидался: $buildBat"
+			throw "Engine not found: $enginePath`nExpected: $buildBat"
 		}
 		return (Resolve-Path -LiteralPath $enginePath).Path
 	}
@@ -69,18 +72,13 @@ function Find-EnginePath {
 	$seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 	foreach ($enginePath in $candidates) {
 		if (-not $seen.Add($enginePath)) { continue }
-		$buildBat = if ($IsWindows) {
-			Join-Path $enginePath "Build\BatchFiles\Build.bat"
-		} else {
-			Join-Path $enginePath "Build/BatchFiles/Build.sh"
-		}
-		if (Test-Path -LiteralPath $buildBat) {
+		if (Test-Path -LiteralPath (Get-UbtScript $enginePath)) {
 			return (Resolve-Path -LiteralPath $enginePath).Path
 		}
 	}
 
 	$hint = if ($PreferredVersion) { "UE_$PreferredVersion" } else { "UE_*" }
-	throw "Unreal Engine не найден (ожидался $hint). Задайте DG_UE_ENGINE_PATH."
+	throw "Unreal Engine not found (expected $hint). Set DG_UE_ENGINE_PATH."
 }
 
 function Test-UnrealEditorRunning {
@@ -91,9 +89,9 @@ function Remove-BuildArtifact {
 	param([string]$BasePath, [string]$Label)
 	if (Test-Path -LiteralPath $BasePath) {
 		Remove-Item -LiteralPath $BasePath -Recurse -Force
-		Write-Step "  - $Label удалена"
+		Write-Step "  - $Label removed"
 	} else {
-		Write-Step "  - $Label не найдена"
+		Write-Step "  - $Label not found"
 	}
 }
 
@@ -103,7 +101,7 @@ function Find-Uproject {
 	$projectRoot = Split-Path -Parent $pluginsRoot
 	$uprojects = @(Get-ChildItem -LiteralPath $projectRoot -Filter "*.uproject" -File)
 	if ($uprojects.Count -eq 0) {
-		throw "Не найден .uproject рядом с Plugins (ожидался parent of $pluginsRoot)"
+		throw "No .uproject next to Plugins (expected parent of $pluginsRoot)"
 	}
 	return $uprojects[0]
 }
@@ -116,11 +114,7 @@ function Invoke-ProjectModuleBuild {
 	)
 
 	$platform = if ($IsWindows) { "Win64" } else { "Mac" }
-	$buildScript = if ($IsWindows) {
-		Join-Path $EnginePath "Build\BatchFiles\Build.bat"
-	} else {
-		Join-Path $EnginePath "Build/BatchFiles/Build.sh"
-	}
+	$buildScript = Get-UbtScript $EnginePath
 
 	Write-Step "  Build: $buildScript"
 	Write-Step "  Target: $TargetName $platform Development"
@@ -134,7 +128,7 @@ function Invoke-ProjectModuleBuild {
 	}
 
 	if ($LASTEXITCODE -ne 0) {
-		throw "Ошибка сборки (exit code $LASTEXITCODE)."
+		throw "Build failed (exit code $LASTEXITCODE)."
 	}
 }
 
@@ -143,11 +137,11 @@ function Invoke-ProjectModuleBuild {
 $PluginDir = $PSScriptRoot
 $platformLabel = if ($IsWindows) { "Windows" } elseif ($IsMacOS) { "macOS" } else { "Unknown" }
 
-Write-Step "[DG_RebuildPlugin] Очистка и пересборка DG_VoxelPlugin ($platformLabel)"
+Write-Step "[DG_RebuildPlugin] Clean and rebuild DG_VoxelPlugin ($platformLabel)"
 Write-Host ""
 
 if (Test-UnrealEditorRunning) {
-	throw "ОШИБКА: Закройте Unreal Editor перед пересборкой!"
+	throw "ERROR: Close Unreal Editor before rebuilding!"
 }
 
 $voxelCoreUplugin = Join-Path (Split-Path -Parent $PluginDir) "VoxelCore\VoxelCore.uplugin"
@@ -155,26 +149,26 @@ if (-not (Test-Path -LiteralPath $voxelCoreUplugin)) {
 	$voxelCoreUplugin = Join-Path (Split-Path -Parent $PluginDir) "VoxelCore/VoxelCore.uplugin"
 }
 if (-not (Test-Path -LiteralPath $voxelCoreUplugin)) {
-	throw "Не найден sibling VoxelCore.`nОжидался: $(Split-Path -Parent $PluginDir)/VoxelCore`nКлонируй: git clone https://github.com/VoxelPlugin/VoxelCore.git"
+	throw "Sibling VoxelCore not found.`nExpected: $(Split-Path -Parent $PluginDir)/VoxelCore`nClone: git clone https://github.com/VoxelPlugin/VoxelCore.git"
 }
 
 $uproject = Find-Uproject -PluginDir $PluginDir
 $enginePath = Find-EnginePath -PreferredVersion $EngineVersion -Override $EnginePathOverride
 
-Write-Step "Плагин:    $PluginDir"
+Write-Step "Plugin:    $PluginDir"
 Write-Step "VoxelCore: $(Split-Path -Parent $voxelCoreUplugin)"
 Write-Step "Uproject:  $($uproject.FullName)"
-Write-Step "Движок:    $enginePath"
-Write-Step "Версия:    $EngineVersion"
+Write-Step "Engine:    $enginePath"
+Write-Step "Version:   $EngineVersion"
 Write-Host ""
 
-Write-Step "[1/2] Удаление Intermediate и Binaries плагина..."
+Write-Step "[1/2] Removing plugin Intermediate and Binaries..."
 Remove-BuildArtifact -BasePath (Join-Path $PluginDir "Intermediate") -Label "Intermediate"
 Remove-BuildArtifact -BasePath (Join-Path $PluginDir "Binaries") -Label "Binaries"
 Write-Host ""
 
-Write-Step "[2/2] Сборка через .uproject (UBT, sibling VoxelCore)..."
+Write-Step "[2/2] Building via .uproject (UBT, sibling VoxelCore)..."
 Invoke-ProjectModuleBuild -EnginePath $enginePath -UprojectPath $uproject.FullName -TargetName $EditorTarget
 
 Write-Host ""
-Write-Step "Готово. DG_VoxelPlugin пересобран вместе с зависимостью VoxelCore."
+Write-Step "Done. DG_VoxelPlugin rebuilt with VoxelCore dependency."

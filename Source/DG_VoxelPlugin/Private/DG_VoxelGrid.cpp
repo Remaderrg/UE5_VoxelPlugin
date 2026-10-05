@@ -237,13 +237,8 @@ int32 FDG_VoxelGrid::CountSolidFalloff(
 
 	const float Threshold = FMath::Clamp(CarveThreshold, 0.f, 1.f);
 	const float RadiusSq = Radius * Radius;
-	const float InvVS = 1.f / VoxelSize;
-	const int32 X0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X - Radius - Origin.X) * InvVS), 0, DimX - 1);
-	const int32 Y0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y - Radius - Origin.Y) * InvVS), 0, DimY - 1);
-	const int32 Z0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z - Radius - Origin.Z) * InvVS), 0, DimZ - 1);
-	const int32 X1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X + Radius - Origin.X) * InvVS), 0, DimX - 1);
-	const int32 Y1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y + Radius - Origin.Y) * InvVS), 0, DimY - 1);
-	const int32 Z1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z + Radius - Origin.Z) * InvVS), 0, DimZ - 1);
+	int32 X0, Y0, Z0, X1, Y1, Z1;
+	GetRadiusVoxelBounds(CenterLocal, Radius, X0, Y0, Z0, X1, Y1, Z1);
 
 	int32 Count = 0;
 	for (int32 Z = Z0; Z <= Z1; ++Z)
@@ -273,12 +268,26 @@ int32 FDG_VoxelGrid::CountSolidFalloff(
 	return Count;
 }
 
+void FDG_VoxelGrid::GetRadiusVoxelBounds(
+	const FVector& CenterLocal,
+	float Radius,
+	int32& OutX0, int32& OutY0, int32& OutZ0,
+	int32& OutX1, int32& OutY1, int32& OutZ1) const
+{
+	const float InvVS = 1.f / VoxelSize;
+	OutX0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X - Radius - Origin.X) * InvVS), 0, DimX - 1);
+	OutY0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y - Radius - Origin.Y) * InvVS), 0, DimY - 1);
+	OutZ0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z - Radius - Origin.Z) * InvVS), 0, DimZ - 1);
+	OutX1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X + Radius - Origin.X) * InvVS), 0, DimX - 1);
+	OutY1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y + Radius - Origin.Y) * InvVS), 0, DimY - 1);
+	OutZ1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z + Radius - Origin.Z) * InvVS), 0, DimZ - 1);
+}
+
 int32 FDG_VoxelGrid::CarveFalloffShell(
 	const FVector& CenterLocal,
 	float PrevR,
 	float CurrR,
 	const FVoxelFalloff& Falloff,
-	float CarveThreshold,
 	TArray<FIntVector>& OutRemoved,
 	FVoxelOptionalIntBox& OutDirty)
 {
@@ -287,15 +296,9 @@ int32 FDG_VoxelGrid::CarveFalloffShell(
 		return 0;
 	}
 
-	(void)CarveThreshold;
 	const float CurrRSq = CurrR * CurrR;
-	const float InvVS = 1.f / VoxelSize;
-	const int32 X0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X - CurrR - Origin.X) * InvVS), 0, DimX - 1);
-	const int32 Y0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y - CurrR - Origin.Y) * InvVS), 0, DimY - 1);
-	const int32 Z0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z - CurrR - Origin.Z) * InvVS), 0, DimZ - 1);
-	const int32 X1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X + CurrR - Origin.X) * InvVS), 0, DimX - 1);
-	const int32 Y1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y + CurrR - Origin.Y) * InvVS), 0, DimY - 1);
-	const int32 Z1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z + CurrR - Origin.Z) * InvVS), 0, DimZ - 1);
+	int32 X0, Y0, Z0, X1, Y1, Z1;
+	GetRadiusVoxelBounds(CenterLocal, CurrR, X0, Y0, Z0, X1, Y1, Z1);
 
 	int32 Removed = 0;
 	for (int32 Z = Z0; Z <= Z1; ++Z)
@@ -348,17 +351,6 @@ int32 FDG_VoxelGrid::CarveFalloffShell(
 		}
 	}
 	return Removed;
-}
-
-void FDG_VoxelGrid::PackBits(TArray<uint8>& OutPacked) const
-{
-	const int32 BitCount = NumBits();
-	OutPacked.SetNumZeroed((BitCount + 7) / 8);
-	for (FVoxelSetBitIterator It = Occupancy.IterateSetBits(); It; ++It)
-	{
-		const int32 I = It.GetIndex();
-		OutPacked[I >> 3] |= (uint8)(1 << (I & 7));
-	}
 }
 
 bool FDG_VoxelGrid::UnpackBits(const uint8* Packed, int32 PackedBytes, int32 BitCount)

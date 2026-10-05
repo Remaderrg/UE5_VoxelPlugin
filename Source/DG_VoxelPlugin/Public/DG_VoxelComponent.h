@@ -60,7 +60,6 @@ private:
 		float PrevR = 0.f;
 		uint8 FalloffType = 2;
 		float FalloffAmount = 0.5f;
-		float CarveThreshold = 0.5f;
 	};
 
 	struct FChunkMeshBuild
@@ -86,15 +85,11 @@ private:
 	TArray<FIntVector> DigRemovedSeeds;
 	/** Heap-allocated — FVoxelOptionalIntBox lives in VoxelMinimal (not UHT-safe). */
 	FVoxelOptionalIntBox* DigDirty = nullptr;
-	bool bMeshDirty = false;
 	float RemeshAccumulator = 0.f;
 
-	int32 NumChunksX() const;
-	int32 NumChunksY() const;
-	int32 NumChunksZ() const;
+	int32 NumChunks(int32 Dim) const;
 	int32 ChunkSectionIndex(int32 Cx, int32 Cy, int32 Cz) const;
 
-	void ApplyRuntimeSettings();
 	void RefreshGridToWorld();
 	bool EnsureProcMesh();
 	bool VoxelizeStaticMesh(UStaticMesh* StaticMesh);

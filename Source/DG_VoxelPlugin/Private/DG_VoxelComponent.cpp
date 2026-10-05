@@ -12,7 +12,6 @@
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
-#include "ProceduralMeshComponent.h"
 #include "StaticMeshResources.h"
 #include "VoxelZipReader.h"
 #include "VoxelFalloff.h"
@@ -59,6 +58,22 @@ namespace DGVoxel
 	{
 		return static_cast<EVoxelFalloffType>(FMath::Clamp(Type, 0, 4));
 	}
+
+	template <typename TFunc>
+	static void ForIndices(int32 Count, bool bParallel, TFunc&& Func)
+	{
+		if (bParallel && Count > 1)
+		{
+			Voxel::ParallelFor(Count, Forward<TFunc>(Func));
+		}
+		else
+		{
+			for (int32 I = 0; I < Count; ++I)
+			{
+				Func(I);
+			}
+		}
+	}
 }
 
 UDG_VoxelComponent::UDG_VoxelComponent()
@@ -83,29 +98,14 @@ FString UDG_VoxelComponent::SlotFilePath(const FString& SlotName)
 		FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Voxels"), SlotName + TEXT(".voxel")));
 }
 
-int32 UDG_VoxelComponent::NumChunksX() const
+int32 UDG_VoxelComponent::NumChunks(int32 Dim) const
 {
-	return FMath::Max(1, (Grid->DimX + ChunkSize - 1) / ChunkSize);
-}
-
-int32 UDG_VoxelComponent::NumChunksY() const
-{
-	return FMath::Max(1, (Grid->DimY + ChunkSize - 1) / ChunkSize);
-}
-
-int32 UDG_VoxelComponent::NumChunksZ() const
-{
-	return FMath::Max(1, (Grid->DimZ + ChunkSize - 1) / ChunkSize);
+	return FMath::Max(1, (Dim + ChunkSize - 1) / ChunkSize);
 }
 
 int32 UDG_VoxelComponent::ChunkSectionIndex(int32 Cx, int32 Cy, int32 Cz) const
 {
-	return Cx + NumChunksX() * (Cy + NumChunksY() * Cz);
-}
-
-void UDG_VoxelComponent::ApplyRuntimeSettings()
-{
-	DigDuration = FMath::Max(0.01f, GDG_VoxelDefaultDigDuration);
+	return Cx + NumChunks(Grid->DimX) * (Cy + NumChunks(Grid->DimY) * Cz);
 }
 
 void UDG_VoxelComponent::RefreshGridToWorld()
@@ -193,7 +193,7 @@ bool UDG_VoxelComponent::BuildFromMesh(UStaticMeshComponent* Mesh, float InVoxel
 	}
 
 	ClearDigState();
-	ApplyRuntimeSettings();
+	DigDuration = FMath::Max(0.01f, GDG_VoxelDefaultDigDuration);
 	SourceMesh = Mesh;
 	VoxelSize = FMath::Max(1.f, InVoxelSize);
 	MinClusterVoxels = FMath::Max(1, InMinCluster);
@@ -304,20 +304,10 @@ bool UDG_VoxelComponent::VoxelizeStaticMesh(UStaticMesh* StaticMesh)
 		}
 	};
 
-	if (GDG_VoxelParallelMake && TriCount > 1)
+	DGVoxel::ForIndices(TriCount, GDG_VoxelParallelMake, [&](int32 T)
 	{
-		Voxel::ParallelFor(TriCount, [&](int32 T)
-		{
-			MarkTriangle(T);
-		});
-	}
-	else
-	{
-		for (int32 T = 0; T < TriCount; ++T)
-		{
-			MarkTriangle(T);
-		}
-	}
+		MarkTriangle(T);
+	});
 
 	Grid->DilateSolidOnce();
 	Grid->FillInteriorFromSurface();
@@ -333,7 +323,6 @@ void UDG_VoxelComponent::ClearDigState()
 	{
 		DigDirty->Reset();
 	}
-	bMeshDirty = false;
 	RemeshAccumulator = 0.f;
 	SetComponentTickEnabled(false);
 }
@@ -347,16 +336,14 @@ void UDG_VoxelComponent::FlushDirtyMesh()
 {
 	VOXEL_FUNCTION_COUNTER();
 
-	if (!bMeshDirty || !DigDirty || !DigDirty->IsValid())
+	if (!DigDirty || !DigDirty->IsValid())
 	{
-		bMeshDirty = false;
 		return;
 	}
 
 	const FVoxelIntBox& Box = DigDirty->GetBox();
 	RebuildDirtyRegion(Box.Min.X, Box.Min.Y, Box.Min.Z, Box.Max.X - 1, Box.Max.Y - 1, Box.Max.Z - 1, true);
 	DigDirty->Reset();
-	bMeshDirty = false;
 	RemeshAccumulator = 0.f;
 }
 
@@ -375,11 +362,10 @@ void UDG_VoxelComponent::FinishPendingDigs()
 		{
 			*DigDirty += CullDirty.GetBox();
 		}
-		bMeshDirty = DigDirty->IsValid();
 	}
 
 	DigRemovedSeeds.Reset();
-	if (bMeshDirty)
+	if (DigDirty && DigDirty->IsValid())
 	{
 		FlushDirtyMesh();
 	}
@@ -396,8 +382,7 @@ void UDG_VoxelComponent::FlushPendingDigsImmediate()
 	for (FDigStroke& S : PendingDigs)
 	{
 		const FVoxelFalloff Falloff(DGVoxel::ClampFalloffType(S.FalloffType), S.FalloffAmount);
-		Grid->CarveFalloffShell(
-			S.CenterLocal, S.PrevR, S.TargetR, Falloff, S.CarveThreshold, DigRemovedSeeds, *DigDirty);
+		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, S.TargetR, Falloff, DigRemovedSeeds, *DigDirty);
 		S.PrevR = S.TargetR;
 	}
 	PendingDigs.Reset();
@@ -422,8 +407,7 @@ void UDG_VoxelComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const float T = FMath::Clamp(S.Age / Dur, 0.f, 1.f);
 		const float CurrR = S.TargetR * FMath::SmoothStep(0.f, 1.f, T);
 		const FVoxelFalloff Falloff(DGVoxel::ClampFalloffType(S.FalloffType), S.FalloffAmount);
-		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, CurrR, Falloff, S.CarveThreshold, DigRemovedSeeds, *DigDirty);
-		bMeshDirty = DigDirty->IsValid();
+		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, CurrR, Falloff, DigRemovedSeeds, *DigDirty);
 		S.PrevR = CurrR;
 		if (T >= 1.f)
 		{
@@ -437,7 +421,7 @@ void UDG_VoxelComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
-	if (!bMeshDirty)
+	if (!DigDirty || !DigDirty->IsValid())
 	{
 		return;
 	}
@@ -531,22 +515,11 @@ void UDG_VoxelComponent::RebuildChunks(const TArray<FIntVector>& ChunkCoords, bo
 	TArray<FChunkMeshBuild> Built;
 	Built.SetNum(ChunkCoords.Num());
 
-	if (GDG_VoxelParallelRemesh && ChunkCoords.Num() > 1)
+	DGVoxel::ForIndices(ChunkCoords.Num(), GDG_VoxelParallelRemesh, [&](int32 Index)
 	{
-		Voxel::ParallelFor(ChunkCoords.Num(), [&](int32 Index)
-		{
-			const FIntVector& C = ChunkCoords[Index];
-			BuildChunkMesh(C.X, C.Y, C.Z, Built[Index]);
-		});
-	}
-	else
-	{
-		for (int32 Index = 0; Index < ChunkCoords.Num(); ++Index)
-		{
-			const FIntVector& C = ChunkCoords[Index];
-			BuildChunkMesh(C.X, C.Y, C.Z, Built[Index]);
-		}
-	}
+		const FIntVector& C = ChunkCoords[Index];
+		BuildChunkMesh(C.X, C.Y, C.Z, Built[Index]);
+	});
 
 	for (const FChunkMeshBuild& Chunk : Built)
 	{
@@ -599,13 +572,16 @@ void UDG_VoxelComponent::RebuildMesh()
 
 	ProcMesh->ClearAllMeshSections();
 
+	const int32 NX = NumChunks(Grid->DimX);
+	const int32 NY = NumChunks(Grid->DimY);
+	const int32 NZ = NumChunks(Grid->DimZ);
 	TArray<FIntVector> Chunks;
-	Chunks.Reserve(NumChunksX() * NumChunksY() * NumChunksZ());
-	for (int32 Cz = 0; Cz < NumChunksZ(); ++Cz)
+	Chunks.Reserve(NX * NY * NZ);
+	for (int32 Cz = 0; Cz < NZ; ++Cz)
 	{
-		for (int32 Cy = 0; Cy < NumChunksY(); ++Cy)
+		for (int32 Cy = 0; Cy < NY; ++Cy)
 		{
-			for (int32 Cx = 0; Cx < NumChunksX(); ++Cx)
+			for (int32 Cx = 0; Cx < NX; ++Cx)
 			{
 				Chunks.Emplace(Cx, Cy, Cz);
 			}
@@ -641,7 +617,6 @@ int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius)
 	Stroke.TargetR = DigR;
 	Stroke.FalloffType = static_cast<uint8>(Falloff.Type);
 	Stroke.FalloffAmount = Falloff.Amount;
-	Stroke.CarveThreshold = CarveThreshold;
 	PendingDigs.Add(Stroke);
 	SetComponentTickEnabled(true);
 	return Estimate;
@@ -653,7 +628,7 @@ bool UDG_VoxelComponent::SaveToSlot(const FString& SlotName)
 
 	if (SlotName.IsEmpty() || Grid->NumBits() <= 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SaveToSlot: empty slot or grid"));
+		VOXEL_MESSAGE(Warning, "SaveToSlot: empty slot or grid");
 		return false;
 	}
 
@@ -684,10 +659,10 @@ bool UDG_VoxelComponent::SaveToSlot(const FString& SlotName)
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
 	if (!FFileHelper::SaveArrayToFile(Bytes, *Path))
 	{
-		UE_LOG(LogTemp, Error, TEXT("SaveToSlot FAIL: %s"), *Path);
+		VOXEL_MESSAGE(Error, "SaveToSlot FAIL: {0}", Path);
 		return false;
 	}
-	UE_LOG(LogTemp, Log, TEXT("SaveToSlot OK: %s (%d bytes)"), *Path, Bytes.Num());
+	VOXEL_MESSAGE(Info, "SaveToSlot OK: {0} ({1} bytes)", Path, Bytes.Num());
 	return true;
 }
 
@@ -702,13 +677,13 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 	}
 
 	ClearDigState();
-	ApplyRuntimeSettings();
+	DigDuration = FMath::Max(0.01f, GDG_VoxelDefaultDigDuration);
 
 	TArray<uint8> Bytes;
 	const FString Path = SlotFilePath(SlotName);
 	if (!FFileHelper::LoadFileToArray(Bytes, *Path))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LoadFromSlot: no file %s"), *Path);
+		VOXEL_MESSAGE(Warning, "LoadFromSlot: no file {0}", Path);
 		return false;
 	}
 
