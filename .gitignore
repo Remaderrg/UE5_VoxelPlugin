@@ -1,0 +1,30 @@
+# Unreal build
+Binaries/
+Intermediate/
+Build/
+DerivedDataCache/
+Saved/
+
+# IDE / OS
+.vs/
+.idea/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+.DS_Store
+Thumbs.db
+
+# Editor / local
+*.user
+*.userprefs
+*.aps
+*.opendb
+*.db
+*.log
+
+.vscode/
