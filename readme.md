@@ -57,7 +57,7 @@ Staged: `StagedBuilds/Windows/WinterGame/Saved/Voxels/` (or next to the `.exe`).
 ### Dig + Save
 
 1. **Dig Voxel** (Location, Radius, Strength) — Voxel pin optional. Strength scales density removal (default 1).
-2. **Save Voxel** (SlotName) — Voxel pin optional.  
+2. **Save Voxel** (SlotName) — Voxel pin optional; empty SlotName uses `ActiveSlot` from last Load/Save. Make/Load reuse one Voxel component on the actor.  
    After Save/Load/Reset signature changes: **re-wire the nodes** in BP (Compile).
 
 ### Load / Reset

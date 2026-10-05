@@ -35,6 +35,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DG|Voxel", meta = (ClampMin = "0.01"))
 	float DigDuration = 0.2f;
 
+	/** Last successful Load/Save slot; Save uses this when SlotName pin is empty. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DG|Voxel")
+	FString ActiveSlot;
+
 	UPROPERTY(BlueprintReadOnly, Category = "DG|Voxel")
 	TObjectPtr<UStaticMeshComponent> SourceMesh = nullptr;
 

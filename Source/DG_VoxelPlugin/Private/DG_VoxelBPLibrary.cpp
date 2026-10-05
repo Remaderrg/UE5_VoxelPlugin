@@ -58,8 +58,12 @@ namespace
 		return nullptr;
 	}
 
-	static UDG_VoxelComponent* CreateVoxelOnOwner(AActor* Owner)
+	static UDG_VoxelComponent* GetOrCreateVoxelOnOwner(AActor* Owner)
 	{
+		if (UDG_VoxelComponent* Existing = Owner->FindComponentByClass<UDG_VoxelComponent>())
+		{
+			return Existing;
+		}
 		UDG_VoxelComponent* Voxel = NewObject<UDG_VoxelComponent>(Owner, NAME_None, RF_Transactional);
 		Owner->AddInstanceComponent(Voxel);
 		Voxel->RegisterComponent();
@@ -88,11 +92,10 @@ UDG_VoxelComponent* UDG_VoxelBPLibrary::MakeVoxel(
 	int32 Cluster = 8;
 	ResolveMakeDefaults(VoxelSize, MinClusterVoxels, Size, Cluster);
 
-	UDG_VoxelComponent* Voxel = CreateVoxelOnOwner(Mesh->GetOwner());
+	UDG_VoxelComponent* Voxel = GetOrCreateVoxelOnOwner(Mesh->GetOwner());
 	if (!Voxel->BuildFromMesh(Mesh, Size, Cluster))
 	{
 		UE_LOG(LogDGVoxelBP, Warning, TEXT("MakeVoxel: BuildFromMesh failed"));
-		Voxel->DestroyComponent();
 		return nullptr;
 	}
 	return Voxel;
@@ -137,12 +140,11 @@ UDG_VoxelComponent* UDG_VoxelBPLibrary::LoadVoxelFromMesh(
 		return nullptr;
 	}
 
-	UDG_VoxelComponent* Voxel = CreateVoxelOnOwner(Mesh->GetOwner());
+	UDG_VoxelComponent* Voxel = GetOrCreateVoxelOnOwner(Mesh->GetOwner());
 	Voxel->SourceMesh = Mesh;
 
 	if (!Voxel->LoadFromSlot(SlotName))
 	{
-		Voxel->DestroyComponent();
 		return nullptr;
 	}
 	return Voxel;

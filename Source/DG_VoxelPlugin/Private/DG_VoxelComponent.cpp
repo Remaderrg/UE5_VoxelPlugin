@@ -592,7 +592,12 @@ void UDG_VoxelComponent::RebuildMesh()
 
 int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius, float Strength)
 {
-	if (!EnsureProcMesh() || Grid->NumBits() <= 0 || Radius <= 0.f || Strength <= 0.f)
+	if (Grid->NumBits() <= 0)
+	{
+		VOXEL_MESSAGE(Warning, "DigAtWorld: empty grid — Make/Load first");
+		return 0;
+	}
+	if (!EnsureProcMesh() || Radius <= 0.f || Strength <= 0.f)
 	{
 		return 0;
 	}
@@ -627,9 +632,15 @@ bool UDG_VoxelComponent::SaveToSlot(const FString& SlotName)
 {
 	VOXEL_FUNCTION_COUNTER();
 
-	if (SlotName.IsEmpty() || Grid->NumBits() <= 0)
+	const FString EffectiveSlot = !SlotName.IsEmpty() ? SlotName : ActiveSlot;
+	if (EffectiveSlot.IsEmpty())
 	{
-		VOXEL_MESSAGE(Warning, "SaveToSlot: empty slot or grid");
+		VOXEL_MESSAGE(Warning, "SaveToSlot: empty SlotName");
+		return false;
+	}
+	if (Grid->NumBits() <= 0)
+	{
+		VOXEL_MESSAGE(Warning, "SaveToSlot: empty grid — Make/Load first");
 		return false;
 	}
 
@@ -656,13 +667,14 @@ bool UDG_VoxelComponent::SaveToSlot(const FString& SlotName)
 	DGVoxel::AppendPod(Bytes, BitCount);
 	Bytes.Append(Packed);
 
-	const FString Path = SlotFilePath(SlotName);
+	const FString Path = SlotFilePath(EffectiveSlot);
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
 	if (!FFileHelper::SaveArrayToFile(Bytes, *Path))
 	{
 		VOXEL_MESSAGE(Error, "SaveToSlot FAIL: {0}", Path);
 		return false;
 	}
+	ActiveSlot = EffectiveSlot;
 	VOXEL_MESSAGE(Info, "SaveToSlot OK: {0} ({1} bytes)", Path, Bytes.Num());
 	return true;
 }
@@ -785,5 +797,6 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 	CacheVoxelMaterial();
 	RebuildMesh();
 	HideSourceMesh();
+	ActiveSlot = SlotName;
 	return true;
 }
