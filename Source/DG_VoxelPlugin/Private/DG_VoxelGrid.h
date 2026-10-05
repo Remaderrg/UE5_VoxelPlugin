@@ -70,7 +70,8 @@ struct FDG_VoxelGrid
 		float CurrR,
 		const FVoxelFalloff& Falloff,
 		TArray<FIntVector>& OutRemoved,
-		FVoxelOptionalIntBox& OutDirty);
+		FVoxelOptionalIntBox& OutDirty,
+		float Strength = 1.f);
 
 	bool UnpackBits(const uint8* Packed, int32 PackedBytes, int32 BitCount);
 	void PackDensity(TArray<uint8>& OutPacked) const;

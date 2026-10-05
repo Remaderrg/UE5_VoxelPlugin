@@ -289,7 +289,8 @@ int32 FDG_VoxelGrid::CarveFalloffShell(
 	float CurrR,
 	const FVoxelFalloff& Falloff,
 	TArray<FIntVector>& OutRemoved,
-	FVoxelOptionalIntBox& OutDirty)
+	FVoxelOptionalIntBox& OutDirty,
+	float Strength)
 {
 	if (CurrR <= PrevR || NumBits() <= 0)
 	{
@@ -332,7 +333,7 @@ int32 FDG_VoxelGrid::CarveFalloffShell(
 				}
 
 				const float Old = D;
-				D = FMath::Max(0.f, Old - Delta);
+				D = FMath::Max(0.f, Old - Delta * Strength);
 				if (D >= Old)
 				{
 					continue;

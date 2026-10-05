@@ -32,6 +32,7 @@ public:
 		const UObject* WorldContextObject,
 		FVector WorldLocation,
 		float Radius = 50.f,
+		float Strength = 1.f,
 		UDG_VoxelComponent* Voxel = nullptr);
 
 	/** Voxel optional — if empty, finds UDG_VoxelComponent on Self (same as Dig). */

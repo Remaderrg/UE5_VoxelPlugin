@@ -382,7 +382,7 @@ void UDG_VoxelComponent::FlushPendingDigsImmediate()
 	for (FDigStroke& S : PendingDigs)
 	{
 		const FVoxelFalloff Falloff(DGVoxel::ClampFalloffType(S.FalloffType), S.FalloffAmount);
-		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, S.TargetR, Falloff, DigRemovedSeeds, *DigDirty);
+		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, S.TargetR, Falloff, DigRemovedSeeds, *DigDirty, S.Strength);
 		S.PrevR = S.TargetR;
 	}
 	PendingDigs.Reset();
@@ -407,7 +407,7 @@ void UDG_VoxelComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const float T = FMath::Clamp(S.Age / Dur, 0.f, 1.f);
 		const float CurrR = S.TargetR * FMath::SmoothStep(0.f, 1.f, T);
 		const FVoxelFalloff Falloff(DGVoxel::ClampFalloffType(S.FalloffType), S.FalloffAmount);
-		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, CurrR, Falloff, DigRemovedSeeds, *DigDirty);
+		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, CurrR, Falloff, DigRemovedSeeds, *DigDirty, S.Strength);
 		S.PrevR = CurrR;
 		if (T >= 1.f)
 		{
@@ -590,9 +590,9 @@ void UDG_VoxelComponent::RebuildMesh()
 	RebuildChunks(Chunks, true);
 }
 
-int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius)
+int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius, float Strength)
 {
-	if (!EnsureProcMesh() || Grid->NumBits() <= 0 || Radius <= 0.f)
+	if (!EnsureProcMesh() || Grid->NumBits() <= 0 || Radius <= 0.f || Strength <= 0.f)
 	{
 		return 0;
 	}
@@ -617,6 +617,7 @@ int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius)
 	Stroke.TargetR = DigR;
 	Stroke.FalloffType = static_cast<uint8>(Falloff.Type);
 	Stroke.FalloffAmount = Falloff.Amount;
+	Stroke.Strength = Strength;
 	PendingDigs.Add(Stroke);
 	SetComponentTickEnabled(true);
 	return Estimate;

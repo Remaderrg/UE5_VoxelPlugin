@@ -45,7 +45,7 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	bool BuildFromMesh(UStaticMeshComponent* Mesh, float InVoxelSize, int32 InMinCluster);
-	int32 DigAtWorld(const FVector& WorldLocation, float Radius);
+	int32 DigAtWorld(const FVector& WorldLocation, float Radius, float Strength = 1.f);
 	bool SaveToSlot(const FString& SlotName);
 	bool LoadFromSlot(const FString& SlotName);
 
@@ -60,6 +60,7 @@ private:
 		float PrevR = 0.f;
 		uint8 FalloffType = 2;
 		float FalloffAmount = 0.5f;
+		float Strength = 1.f;
 	};
 
 	struct FChunkMeshBuild

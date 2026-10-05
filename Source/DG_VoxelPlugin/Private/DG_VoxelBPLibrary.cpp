@@ -102,10 +102,11 @@ int32 UDG_VoxelBPLibrary::DigVoxel(
 	const UObject* WorldContextObject,
 	FVector WorldLocation,
 	float Radius,
+	float Strength,
 	UDG_VoxelComponent* Voxel)
 {
 	UDG_VoxelComponent* Resolved = RequireVoxel(Voxel, WorldContextObject, TEXT("DigVoxel: no voxel — Make/Load first"));
-	return Resolved ? Resolved->DigAtWorld(WorldLocation, Radius) : 0;
+	return Resolved ? Resolved->DigAtWorld(WorldLocation, Radius, Strength) : 0;
 }
 
 bool UDG_VoxelBPLibrary::SaveVoxel(
