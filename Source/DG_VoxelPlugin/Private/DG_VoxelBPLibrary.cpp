@@ -4,6 +4,9 @@
 #include "DG_VoxelCVars.h"
 #include "DG_VoxelComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "HAL/FileManager.h"
 
@@ -174,4 +177,52 @@ bool UDG_VoxelBPLibrary::ResetVoxel(
 	}
 
 	return Resolved->BuildFromMesh(Resolved->SourceMesh, Size, Cluster);
+}
+
+int32 UDG_VoxelBPLibrary::SearchAllVoxels(
+	const UObject* WorldContextObject,
+	FVector WorldLocation,
+	float Radius)
+{
+	if (!WorldContextObject || Radius <= 0.f)
+	{
+		return 0;
+	}
+	UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull) : nullptr;
+	if (!World)
+	{
+		return 0;
+	}
+
+	int32 Total = 0;
+	for (FActorIterator It(World); It; ++It)
+	{
+		TInlineComponentArray<UDG_VoxelComponent*> Voxels;
+		It->GetComponents(Voxels);
+		for (UDG_VoxelComponent* Voxel : Voxels)
+		{
+			if (Voxel)
+			{
+				Total += Voxel->QuerySolidInRadiusWorld(WorldLocation, Radius);
+			}
+		}
+	}
+	return Total;
+}
+
+void UDG_VoxelBPLibrary::VoxelInfo(
+	const UObject* WorldContextObject,
+	const FString& SlotName,
+	UDG_VoxelComponent* Voxel,
+	int32& All,
+	int32& Remaining)
+{
+	All = 0;
+	Remaining = 0;
+	// SlotName kept for BP wiring (empty → ActiveSlot context); counts are live-only.
+	(void)SlotName;
+	if (UDG_VoxelComponent* Resolved = RequireVoxel(Voxel, WorldContextObject, TEXT("VoxelInfo: no voxel — Make/Load first")))
+	{
+		Resolved->GetVoxelInfo(All, Remaining);
+	}
 }

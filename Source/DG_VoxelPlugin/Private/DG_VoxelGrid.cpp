@@ -224,18 +224,13 @@ void FDG_VoxelGrid::RemoveSmallClusters(int32 MinClusterVoxels, FVoxelOptionalIn
 	}
 }
 
-int32 FDG_VoxelGrid::CountSolidFalloff(
-	const FVector& CenterLocal,
-	float Radius,
-	const FVoxelFalloff& Falloff,
-	float CarveThreshold) const
+int32 FDG_VoxelGrid::CountSolidInRadius(const FVector& CenterLocal, float Radius) const
 {
 	if (Radius <= 0.f || NumBits() <= 0)
 	{
 		return 0;
 	}
 
-	const float Threshold = FMath::Clamp(CarveThreshold, 0.f, 1.f);
 	const float RadiusSq = Radius * Radius;
 	int32 X0, Y0, Z0, X1, Y1, Z1;
 	GetRadiusVoxelBounds(CenterLocal, Radius, X0, Y0, Z0, X1, Y1, Z1);
@@ -248,17 +243,11 @@ int32 FDG_VoxelGrid::CountSolidFalloff(
 			for (int32 X = X0; X <= X1; ++X)
 			{
 				const int32 I = IndexOf(X, Y, Z);
-				if (Density[I] < 0.5f)
+				if (!Occupancy[I])
 				{
 					continue;
 				}
-				const float DistSq = FVector::DistSquared(VoxelCenterLocal(X, Y, Z), CenterLocal);
-				if (DistSq > RadiusSq)
-				{
-					continue;
-				}
-				const float Dist = FMath::Sqrt(DistSq);
-				if (FVoxelFalloff::GetFalloff(Falloff.Type, Dist, Radius, Falloff.Amount) >= Threshold)
+				if (FVector::DistSquared(VoxelCenterLocal(X, Y, Z), CenterLocal) <= RadiusSq)
 				{
 					++Count;
 				}
@@ -278,9 +267,9 @@ void FDG_VoxelGrid::GetRadiusVoxelBounds(
 	OutX0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X - Radius - Origin.X) * InvVS), 0, DimX - 1);
 	OutY0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y - Radius - Origin.Y) * InvVS), 0, DimY - 1);
 	OutZ0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z - Radius - Origin.Z) * InvVS), 0, DimZ - 1);
-	OutX1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X + Radius - Origin.X) * InvVS), 0, DimX - 1);
-	OutY1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y + Radius - Origin.Y) * InvVS), 0, DimY - 1);
-	OutZ1 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z + Radius - Origin.Z) * InvVS), 0, DimZ - 1);
+	OutX1 = FMath::Clamp(FMath::CeilToInt((CenterLocal.X + Radius - Origin.X) * InvVS) - 1, 0, DimX - 1);
+	OutY1 = FMath::Clamp(FMath::CeilToInt((CenterLocal.Y + Radius - Origin.Y) * InvVS) - 1, 0, DimY - 1);
+	OutZ1 = FMath::Clamp(FMath::CeilToInt((CenterLocal.Z + Radius - Origin.Z) * InvVS) - 1, 0, DimZ - 1);
 }
 
 int32 FDG_VoxelGrid::CarveFalloffShell(

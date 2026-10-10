@@ -39,6 +39,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DG|Voxel")
 	FString ActiveSlot;
 
+	/** Solid count right after Make/Reset (or loaded from v3 slot). */
+	UPROPERTY(BlueprintReadOnly, Category = "DG|Voxel")
+	int32 InitialSolidCount = 0;
+
 	UPROPERTY(BlueprintReadOnly, Category = "DG|Voxel")
 	TObjectPtr<UStaticMeshComponent> SourceMesh = nullptr;
 
@@ -52,6 +56,10 @@ public:
 	int32 DigAtWorld(const FVector& WorldLocation, float Radius, float Strength = 1.f);
 	bool SaveToSlot(const FString& SlotName);
 	bool LoadFromSlot(const FString& SlotName);
+
+	/** Shared Dig/Search query: Occupancy in sphere, Radius + VoxelSize. */
+	int32 QuerySolidInRadiusWorld(const FVector& WorldLocation, float Radius);
+	void GetVoxelInfo(int32& OutAll, int32& OutRemaining) const;
 
 	static FString SlotFilePath(const FString& SlotName);
 

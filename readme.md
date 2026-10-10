@@ -7,7 +7,7 @@ StaticMesh voxelization plugin: radius digging, small-cluster culling, `.voxel` 
 - Make: surface → dilate → solid fill → density 0/1
 - Dig: falloff carve on Tick (`DigDuration`); remesh ≤ `RemeshHz`
 - Mesh: Transvoxel
-- Save: flush pending dig → **raw float Density** (no Oodle); Load reads v2 density + legacy v1 bits/zip
+- Save: flush pending dig → **raw float Density** (no Oodle); Load reads v3 density (+ InitialSolidCount) + legacy v2/v1
 
 ## Dependencies
 
@@ -56,9 +56,14 @@ Staged: `StagedBuilds/Windows/WinterGame/Saved/Voxels/` (or next to the `.exe`).
 
 ### Dig + Save
 
-1. **Dig Voxel** (Location, Radius, Strength) — Voxel pin optional. Strength scales density removal (default 1).
+1. **Dig Voxel** (WorldLocation, Radius, Strength) — Voxel pin optional. Return = solid count in sphere (`Radius + VoxelSize`, Occupancy); falloff applies only to carve mesh. Strength scales density removal (default 1).
 2. **Save Voxel** (SlotName) — Voxel pin optional; empty SlotName uses `ActiveSlot` from last Load/Save. Make/Load reuse one Voxel component on the actor.  
-   After Save/Load/Reset signature changes: **re-wire the nodes** in BP (Compile).
+   After Save/Load/Reset/Search signature changes: **re-wire the nodes** in BP (Compile).
+
+### Query
+
+- **Search All Voxels** (WorldLocation, Radius) — solid count in sphere across **all** `UDG_VoxelComponent` in the world (no Voxel pin; works from any BP). Same per-component query as Dig (`R + VoxelSize`).
+- **Voxel Info** (Voxel, SlotName) → **All** (initial solid after Make/Reset, or from v3 slot), **Remaining** (all solid on the map). Remaining ≥ Search; with a radius covering the whole mesh, Search ≈ Remaining.
 
 ### Load / Reset
 
@@ -67,7 +72,8 @@ Staged: `StagedBuilds/Windows/WinterGame/Saved/Voxels/` (or next to the `.exe`).
 
 ## `.voxel` format
 
-Magic `VGXL`, version **2**. New saves: Flags=`0`, raw `float Density[N]`.  
+Magic `VGXL`, version **3**. New saves: Flags=`0`, header includes `InitialSolidCount`, raw `float Density[N]`.  
+Legacy v2: same density payload, no `InitialSolidCount` (All falls back to current solid).  
 Legacy v1: packed occupancy bits; Flags `& 0x1`: zip/Oodle entry `bits` (read-only).
 
 ## Build

@@ -215,6 +215,7 @@ bool UDG_VoxelComponent::BuildFromMesh(UStaticMeshComponent* Mesh, float InVoxel
 		FVoxelOptionalIntBox CullDirty;
 		Grid->RemoveSmallClusters(MinClusterVoxels, CullDirty);
 	}
+	InitialSolidCount = Grid->CountSolid();
 	RebuildMesh();
 	HideSourceMesh();
 	return true;
@@ -592,7 +593,7 @@ void UDG_VoxelComponent::RebuildMesh()
 
 int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius, float Strength)
 {
-	if (Grid->NumBits() <= 0)
+	if (!Grid || Grid->NumBits() <= 0)
 	{
 		VOXEL_MESSAGE(Warning, "DigAtWorld: empty grid — Make/Load first");
 		return 0;
@@ -602,24 +603,18 @@ int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius,
 		return 0;
 	}
 
-	RefreshGridToWorld();
-	ProcMesh->SetWorldTransform(GridToWorld);
-
-	const FVoxelFalloff Falloff(
-		DGVoxel::ClampFalloffType(GDG_VoxelDigFalloffType),
-		FMath::Clamp(GDG_VoxelDigFalloffAmount, 0.f, 1.f));
-	const float CarveThreshold = FMath::Clamp(GDG_VoxelCarveThreshold, 0.f, 1.f);
-	const float DigR = Radius + VoxelSize;
-	const FVector Local = GridToWorld.InverseTransformPosition(WorldLocation);
-	const int32 Estimate = Grid->CountSolidFalloff(Local, DigR, Falloff, CarveThreshold);
+	const int32 Estimate = QuerySolidInRadiusWorld(WorldLocation, Radius);
 	if (Estimate <= 0)
 	{
 		return 0;
 	}
 
+	const FVoxelFalloff Falloff(
+		DGVoxel::ClampFalloffType(GDG_VoxelDigFalloffType),
+		FMath::Clamp(GDG_VoxelDigFalloffAmount, 0.f, 1.f));
 	FDigStroke Stroke;
-	Stroke.CenterLocal = Local;
-	Stroke.TargetR = DigR;
+	Stroke.CenterLocal = GridToWorld.InverseTransformPosition(WorldLocation);
+	Stroke.TargetR = Radius + VoxelSize;
 	Stroke.FalloffType = static_cast<uint8>(Falloff.Type);
 	Stroke.FalloffAmount = Falloff.Amount;
 	Stroke.Strength = Strength;
@@ -651,7 +646,7 @@ bool UDG_VoxelComponent::SaveToSlot(const FString& SlotName)
 	const int32 BitCount = Grid->NumBits();
 
 	TArray<uint8> Bytes;
-	Bytes.Reserve(48 + Packed.Num());
+	Bytes.Reserve(52 + Packed.Num());
 	DGVoxel::AppendPod(Bytes, DG_VoxelMagic);
 	DGVoxel::AppendPod(Bytes, DG_VoxelFormatVersion);
 	const uint16 Flags = 0; // raw density floats
@@ -665,6 +660,7 @@ bool UDG_VoxelComponent::SaveToSlot(const FString& SlotName)
 	DGVoxel::AppendPod(Bytes, (float)Grid->Origin.Z);
 	DGVoxel::AppendPod(Bytes, MinClusterVoxels);
 	DGVoxel::AppendPod(Bytes, BitCount);
+	DGVoxel::AppendPod(Bytes, InitialSolidCount);
 	Bytes.Append(Packed);
 
 	const FString Path = SlotFilePath(EffectiveSlot);
@@ -709,10 +705,11 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 	float Ox = 0.f, Oy = 0.f, Oz = 0.f;
 	int32 InMinCluster = 0;
 	int32 BitCount = 0;
+	int32 InInitialSolid = 0;
 
 	if (!DGVoxel::ReadPod(Bytes, Off, Magic) || Magic != DG_VoxelMagic
 		|| !DGVoxel::ReadPod(Bytes, Off, Version)
-		|| (Version != DG_VoxelFormatVersion && Version != DG_VoxelFormatVersion_Bits)
+		|| Version < DG_VoxelFormatVersion_Bits || Version > DG_VoxelFormatVersion
 		|| !DGVoxel::ReadPod(Bytes, Off, Flags)
 		|| !DGVoxel::ReadPod(Bytes, Off, InDimX)
 		|| !DGVoxel::ReadPod(Bytes, Off, InDimY)
@@ -728,6 +725,13 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 		return false;
 	}
 
+	const bool bHasInitial = Version >= DG_VoxelFormatVersion;
+	if (bHasInitial && !DGVoxel::ReadPod(Bytes, Off, InInitialSolid))
+	{
+		VOXEL_MESSAGE(Warning, "LoadFromSlot: bad header");
+		return false;
+	}
+
 	if (InDimX <= 0 || InDimY <= 0 || InDimZ <= 0
 		|| InDimX > MaxDim || InDimY > MaxDim || InDimZ > MaxDim
 		|| BitCount != InDimX * InDimY * InDimZ
@@ -737,13 +741,13 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 		return false;
 	}
 
-	const bool bDensityV2 = Version == DG_VoxelFormatVersion;
-	const int32 PackedBytes = bDensityV2
+	const bool bDensity = Version >= DG_VoxelFormatVersion_Density;
+	const int32 PackedBytes = bDensity
 		? BitCount * (int32)sizeof(float)
 		: (BitCount + 7) / 8;
 	TArray<uint8> Packed;
 
-	if (!bDensityV2 && (Flags & DG_VoxelFlag_ZipBits))
+	if (!bDensity && (Flags & DG_VoxelFlag_ZipBits))
 	{
 		if (Off >= Bytes.Num())
 		{
@@ -780,7 +784,7 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 	VoxelSize = InVoxelSize;
 	MinClusterVoxels = FMath::Max(1, InMinCluster);
 	Grid->Reset(InDimX, InDimY, InDimZ, InVoxelSize, FVector(Ox, Oy, Oz));
-	const bool bOk = bDensityV2
+	const bool bOk = bDensity
 		? Grid->UnpackDensity(Packed.GetData(), Packed.Num(), BitCount)
 		: Grid->UnpackBits(Packed.GetData(), Packed.Num(), BitCount);
 	if (!bOk)
@@ -788,6 +792,8 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 		VOXEL_MESSAGE(Warning, "LoadFromSlot: unpack failed");
 		return false;
 	}
+
+	InitialSolidCount = bHasInitial ? InInitialSolid : Grid->CountSolid();
 
 	if (!EnsureProcMesh())
 	{
@@ -799,4 +805,26 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 	HideSourceMesh();
 	ActiveSlot = SlotName;
 	return true;
+}
+
+int32 UDG_VoxelComponent::QuerySolidInRadiusWorld(const FVector& WorldLocation, float Radius)
+{
+	if (!Grid || Grid->NumBits() <= 0 || Radius <= 0.f)
+	{
+		return 0;
+	}
+	RefreshGridToWorld();
+	if (ProcMesh)
+	{
+		ProcMesh->SetWorldTransform(GridToWorld);
+	}
+	return Grid->CountSolidInRadius(
+		GridToWorld.InverseTransformPosition(WorldLocation),
+		Radius + VoxelSize);
+}
+
+void UDG_VoxelComponent::GetVoxelInfo(int32& OutAll, int32& OutRemaining) const
+{
+	OutAll = InitialSolidCount;
+	OutRemaining = (Grid && Grid->NumBits() > 0) ? Grid->CountSolid() : 0;
 }

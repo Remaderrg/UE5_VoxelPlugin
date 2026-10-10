@@ -57,11 +57,10 @@ struct FDG_VoxelGrid
 	/** Cull solid groups smaller than MinClusterVoxels; OutDirty = cleared voxels. */
 	void RemoveSmallClusters(int32 MinClusterVoxels, FVoxelOptionalIntBox& OutDirty);
 
-	int32 CountSolidFalloff(
-		const FVector& CenterLocal,
-		float Radius,
-		const FVoxelFalloff& Falloff,
-		float CarveThreshold) const;
+	FORCEINLINE int32 CountSolid() const { return Occupancy.CountSetBits(); }
+
+	/** Solid voxels (Occupancy) whose centers lie within Radius. */
+	int32 CountSolidInRadius(const FVector& CenterLocal, float Radius) const;
 
 	/** Subtract falloff delta (CurrR − PrevR). OutRemoved = solid→air; OutDirty = any density change. */
 	int32 CarveFalloffShell(

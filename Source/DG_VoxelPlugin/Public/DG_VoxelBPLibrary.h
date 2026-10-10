@@ -77,4 +77,28 @@ public:
 		float VoxelSize = 10.f,
 		int32 MinClusterVoxels = 8,
 		UDG_VoxelComponent* Voxel = nullptr);
+
+	/** Sum solid voxels in Radius across every UDG_VoxelComponent in the world. */
+	UFUNCTION(BlueprintPure, Category = "DG|Voxel", meta = (
+		DisplayName = "Search All Voxels",
+		Keywords = "DG Voxel count radius search world",
+		WorldContext = "WorldContextObject",
+		DefaultToSelf = "WorldContextObject"))
+	static int32 SearchAllVoxels(
+		const UObject* WorldContextObject,
+		FVector WorldLocation,
+		float Radius = 50.f);
+
+	/** All = initial solid count; Remaining = solid on the map now. */
+	UFUNCTION(BlueprintPure, Category = "DG|Voxel", meta = (
+		DisplayName = "Voxel Info",
+		Keywords = "DG Voxel info initial remaining count",
+		WorldContext = "WorldContextObject",
+		DefaultToSelf = "WorldContextObject"))
+	static void VoxelInfo(
+		const UObject* WorldContextObject,
+		const FString& SlotName,
+		UDG_VoxelComponent* Voxel,
+		UPARAM(DisplayName = "All") int32& All,
+		UPARAM(DisplayName = "Remaining") int32& Remaining);
 };
