@@ -14,11 +14,13 @@ class DG_VOXELPLUGIN_API UDG_VoxelBPLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
+	/** Load slot, or Make + seed Save if missing (wipe recovery). */
 	UFUNCTION(BlueprintCallable, Category = "DG|Voxel", meta = (
-		DisplayName = "Make Voxel",
-		Keywords = "DG Voxel voxelize mesh"))
-	static UDG_VoxelComponent* MakeVoxel(
+		DisplayName = "Load or Make Voxel From Mesh",
+		Keywords = "DG Voxel load make slot mesh"))
+	static UDG_VoxelComponent* LoadVoxelFromMesh(
 		UStaticMeshComponent* Mesh,
+		const FString& SlotName,
 		float VoxelSize = 10.f,
 		int32 MinClusterVoxels = 8);
 
@@ -46,24 +48,6 @@ public:
 		const UObject* WorldContextObject,
 		const FString& SlotName,
 		UDG_VoxelComponent* Voxel = nullptr);
-
-	UFUNCTION(BlueprintCallable, Category = "DG|Voxel", meta = (
-		DisplayName = "Load Voxel",
-		Keywords = "DG Voxel load slot",
-		WorldContext = "WorldContextObject",
-		DefaultToSelf = "WorldContextObject",
-		AdvancedDisplay = "Voxel"))
-	static bool LoadVoxel(
-		const UObject* WorldContextObject,
-		const FString& SlotName,
-		UDG_VoxelComponent* Voxel = nullptr);
-
-	UFUNCTION(BlueprintCallable, Category = "DG|Voxel", meta = (
-		DisplayName = "Load Voxel From Mesh",
-		Keywords = "DG Voxel load slot mesh"))
-	static UDG_VoxelComponent* LoadVoxelFromMesh(
-		UStaticMeshComponent* Mesh,
-		const FString& SlotName);
 
 	UFUNCTION(BlueprintCallable, Category = "DG|Voxel", meta = (
 		DisplayName = "Reset Voxel",

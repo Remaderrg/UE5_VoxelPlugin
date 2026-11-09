@@ -19,7 +19,7 @@ WinterGame/Plugins/
         ├── Public/
         │   ├── DG_VoxelPlugin.h
         │   ├── DG_VoxelComponent.h     # BP props; PIMPL grid; dig strokes
-        │   ├── DG_VoxelBPLibrary.h     # Make / Dig / Save / Load / Reset (Self-resolve)
+        │   ├── DG_VoxelBPLibrary.h     # Load-or-Make / Dig / Save / Reset / Search / Info
         │   ├── DG_VoxelSave.h          # VGXL density f32 v2 (+ legacy bits/zip)
         │   ├── DG_VoxelCVars.h         # dg.voxel.* externs
         │   ├── DG_VoxelDeveloperSettings.h  # Project Settings → UVoxelDeveloperSettings

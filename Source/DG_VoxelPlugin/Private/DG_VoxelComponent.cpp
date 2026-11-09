@@ -595,7 +595,7 @@ int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius,
 {
 	if (!Grid || Grid->NumBits() <= 0)
 	{
-		VOXEL_MESSAGE(Warning, "DigAtWorld: empty grid — Make/Load first");
+		VOXEL_MESSAGE(Warning, "DigAtWorld: empty grid — Load or Make first");
 		return 0;
 	}
 	if (!EnsureProcMesh() || Radius <= 0.f || Strength <= 0.f)
@@ -635,7 +635,7 @@ bool UDG_VoxelComponent::SaveToSlot(const FString& SlotName)
 	}
 	if (Grid->NumBits() <= 0)
 	{
-		VOXEL_MESSAGE(Warning, "SaveToSlot: empty grid — Make/Load first");
+		VOXEL_MESSAGE(Warning, "SaveToSlot: empty grid — Load or Make first");
 		return false;
 	}
 
@@ -692,8 +692,7 @@ bool UDG_VoxelComponent::LoadFromSlot(const FString& SlotName)
 	const FString Path = SlotFilePath(SlotName);
 	if (!FFileHelper::LoadFileToArray(Bytes, *Path))
 	{
-		VOXEL_MESSAGE(Warning, "LoadFromSlot: no file {0}", Path);
-		return false;
+		return false; // normal: Load-or-Make falls back to voxelize
 	}
 
 	int32 Off = 0;

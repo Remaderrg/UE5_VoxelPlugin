@@ -80,26 +80,39 @@ namespace
 	}
 }
 
-UDG_VoxelComponent* UDG_VoxelBPLibrary::MakeVoxel(
+UDG_VoxelComponent* UDG_VoxelBPLibrary::LoadVoxelFromMesh(
 	UStaticMeshComponent* Mesh,
+	const FString& SlotName,
 	float VoxelSize,
 	int32 MinClusterVoxels)
 {
-	if (!Mesh || !Mesh->GetOwner() || !Mesh->GetStaticMesh())
+	if (!Mesh || !Mesh->GetOwner() || !Mesh->GetStaticMesh() || SlotName.IsEmpty())
 	{
-		UE_LOG(LogDGVoxelBP, Warning, TEXT("MakeVoxel: need Mesh + Owner + StaticMesh"));
+		UE_LOG(LogDGVoxelBP, Warning, TEXT("LoadVoxelFromMesh: need Mesh + Owner + StaticMesh + SlotName"));
 		return nullptr;
+	}
+
+	UDG_VoxelComponent* Voxel = GetOrCreateVoxelOnOwner(Mesh->GetOwner());
+	Voxel->SourceMesh = Mesh;
+
+	if (Voxel->LoadFromSlot(SlotName))
+	{
+		return Voxel;
 	}
 
 	float Size = 10.f;
 	int32 Cluster = 8;
 	ResolveMakeDefaults(VoxelSize, MinClusterVoxels, Size, Cluster);
 
-	UDG_VoxelComponent* Voxel = GetOrCreateVoxelOnOwner(Mesh->GetOwner());
 	if (!Voxel->BuildFromMesh(Mesh, Size, Cluster))
 	{
-		UE_LOG(LogDGVoxelBP, Warning, TEXT("MakeVoxel: BuildFromMesh failed"));
+		UE_LOG(LogDGVoxelBP, Warning, TEXT("LoadVoxelFromMesh: Make failed"));
 		return nullptr;
+	}
+
+	if (!Voxel->SaveToSlot(SlotName))
+	{
+		UE_LOG(LogDGVoxelBP, Warning, TEXT("LoadVoxelFromMesh: seed Save failed"));
 	}
 	return Voxel;
 }
@@ -111,7 +124,7 @@ int32 UDG_VoxelBPLibrary::DigVoxel(
 	float Strength,
 	UDG_VoxelComponent* Voxel)
 {
-	UDG_VoxelComponent* Resolved = RequireVoxel(Voxel, WorldContextObject, TEXT("DigVoxel: no voxel — Make/Load first"));
+	UDG_VoxelComponent* Resolved = RequireVoxel(Voxel, WorldContextObject, TEXT("DigVoxel: no voxel — Load or Make first"));
 	return Resolved ? Resolved->DigAtWorld(WorldLocation, Radius, Strength) : 0;
 }
 
@@ -122,35 +135,6 @@ bool UDG_VoxelBPLibrary::SaveVoxel(
 {
 	UDG_VoxelComponent* Resolved = RequireVoxel(Voxel, WorldContextObject, TEXT("SaveVoxel: no voxel"));
 	return Resolved && Resolved->SaveToSlot(SlotName);
-}
-
-bool UDG_VoxelBPLibrary::LoadVoxel(
-	const UObject* WorldContextObject,
-	const FString& SlotName,
-	UDG_VoxelComponent* Voxel)
-{
-	UDG_VoxelComponent* Resolved = RequireVoxel(Voxel, WorldContextObject, TEXT("LoadVoxel: no voxel"));
-	return Resolved && Resolved->LoadFromSlot(SlotName);
-}
-
-UDG_VoxelComponent* UDG_VoxelBPLibrary::LoadVoxelFromMesh(
-	UStaticMeshComponent* Mesh,
-	const FString& SlotName)
-{
-	if (!Mesh || !Mesh->GetOwner() || SlotName.IsEmpty())
-	{
-		UE_LOG(LogDGVoxelBP, Warning, TEXT("LoadVoxelFromMesh: need Mesh + Owner + SlotName"));
-		return nullptr;
-	}
-
-	UDG_VoxelComponent* Voxel = GetOrCreateVoxelOnOwner(Mesh->GetOwner());
-	Voxel->SourceMesh = Mesh;
-
-	if (!Voxel->LoadFromSlot(SlotName))
-	{
-		return nullptr;
-	}
-	return Voxel;
 }
 
 bool UDG_VoxelBPLibrary::ResetVoxel(
@@ -219,9 +203,8 @@ void UDG_VoxelBPLibrary::VoxelInfo(
 {
 	All = 0;
 	Remaining = 0;
-	// SlotName kept for BP wiring (empty → ActiveSlot context); counts are live-only.
 	(void)SlotName;
-	if (UDG_VoxelComponent* Resolved = RequireVoxel(Voxel, WorldContextObject, TEXT("VoxelInfo: no voxel — Make/Load first")))
+	if (UDG_VoxelComponent* Resolved = RequireVoxel(Voxel, WorldContextObject, TEXT("VoxelInfo: no voxel — Load or Make first")))
 	{
 		Resolved->GetVoxelInfo(All, Remaining);
 	}

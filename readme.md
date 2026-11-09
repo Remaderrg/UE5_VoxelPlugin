@@ -38,36 +38,40 @@ WinterGame/Plugins/
 
 Category: `DG|Voxel`
 
-Grid limit: **512**. Material — SourceMesh slot 0. Dig / Save / Load / Reset resolve Voxel on **Self** when the Voxel pin is empty.
+Grid limit: **512**. Material — SourceMesh slot 0. Dig / Save / Reset resolve Voxel on **Self** when the Voxel pin is empty.
 
 File: `{ProjectSavedDir}/Voxels/{Slot}.voxel`  
-Staged: `StagedBuilds/Windows/WinterGame/Saved/Voxels/` (or next to the `.exe`). Log: `SaveToSlot OK/FAIL: <path>`.
+- Editor/PIE: `{ProjectDir}/Saved/Voxels/`
+- Packaged: `%LOCALAPPDATA%\WinterGame\Saved\Voxels\` (wipe AppData = lose slots)
+- Staged: `StagedBuilds/Windows/WinterGame/Saved/Voxels/` (or next to the `.exe`)
+
+Log: `SaveToSlot OK/FAIL: <path>`.
 
 ### Setup
 
-1. StaticMesh: **Allow CPU Access = true** → Save → Package.
+1. StaticMesh: **Allow CPU Access = true** → Save → **Package/Stage again** (required for Make in `.exe`). Engine BasicShapes (`Cube`) often ignore the flag — use a project copy of the mesh.
 2. `Voxel` variable (optional — Save/Dig work without it via Self).
 3. SlotName, e.g. `"Rock01"`.
 
 ### Startup
 
-1. **Load Voxel From Mesh** (Mesh, Slot) → SET `Voxel`.
-2. Is Valid? No → **Make Voxel** → SET `Voxel`.
+1. **Load or Make Voxel From Mesh** (Mesh, Slot [, Size, Cluster]) → SET `Voxel`.  
+   Loads slot; if missing → Make → seed Save (recovers after wipe).
+
+After signature changes: **re-wire the nodes** in BP (Compile). Remove old **Make Voxel** / **Load Voxel** nodes.
 
 ### Dig + Save
 
 1. **Dig Voxel** (WorldLocation, Radius, Strength) — Voxel pin optional. Return = solid count in sphere (`Radius + VoxelSize`, Occupancy); falloff applies only to carve mesh. Strength scales density removal (default 1).
-2. **Save Voxel** (SlotName) — Voxel pin optional; empty SlotName uses `ActiveSlot` from last Load/Save. Make/Load reuse one Voxel component on the actor.  
-   After Save/Load/Reset/Search signature changes: **re-wire the nodes** in BP (Compile).
+2. **Save Voxel** (SlotName) — Voxel pin optional; empty SlotName uses `ActiveSlot` from last Load/Save.
 
 ### Query
 
-- **Search All Voxels** (WorldLocation, Radius) — solid count in sphere across **all** `UDG_VoxelComponent` in the world (no Voxel pin; works from any BP). Same per-component query as Dig (`R + VoxelSize`).
-- **Voxel Info** (Voxel, SlotName) → **All** (initial solid after Make/Reset, or from v3 slot), **Remaining** (all solid on the map). Remaining ≥ Search; with a radius covering the whole mesh, Search ≈ Remaining.
+- **Search All Voxels** (WorldLocation, Radius) — solid count in sphere across **all** `UDG_VoxelComponent` in the world.
+- **Voxel Info** (Voxel, SlotName) → **All** / **Remaining**.
 
-### Load / Reset
+### Reset
 
-- **Load Voxel** (Slot) — hot reload into a live component.
 - **Reset Voxel** (Slot, Size, Cluster) — clean grid + delete slot file. Do not Destroy.
 
 ## `.voxel` format
