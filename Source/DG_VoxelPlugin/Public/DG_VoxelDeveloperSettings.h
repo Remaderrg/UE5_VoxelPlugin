@@ -39,7 +39,7 @@ public:
 		ClampMin = "0.01",
 		ConsoleVariable = "dg.voxel.DefaultDigDuration",
 		DisplayName = "Default Dig Duration"))
-	float DefaultDigDuration = 0.2f;
+	float DefaultDigDuration = 0.05f;
 
 	/** Synced to dg.voxel.DigFalloffType in PostEditChangeProperty (enum ↔ int CVar). */
 	UPROPERTY(Config, EditAnywhere, Category = "Dig", meta = (DisplayName = "Dig Falloff Type"))
@@ -72,4 +72,10 @@ public:
 		ConsoleVariable = "dg.voxel.RemeshHz",
 		DisplayName = "Dig Remesh Hz"))
 	float RemeshHz = 5.f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Performance", meta = (
+		ClampMin = "1", ClampMax = "8",
+		ConsoleVariable = "dg.voxel.CollisionStep",
+		DisplayName = "Collision Step"))
+	int32 CollisionStep = 2;
 };

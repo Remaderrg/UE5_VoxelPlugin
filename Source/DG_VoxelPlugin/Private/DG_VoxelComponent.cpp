@@ -135,14 +135,29 @@ bool UDG_VoxelComponent::EnsureProcMesh()
 		ProcMesh = NewObject<UProceduralMeshComponent>(Owner, TEXT("DG_VoxelMesh"));
 		ProcMesh->SetupAttachment(Root);
 		ProcMesh->SetAbsolute(true, true, true);
-		ProcMesh->bUseAsyncCooking = true;
-		ProcMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		ProcMesh->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+		ProcMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Owner->AddInstanceComponent(ProcMesh);
 		ProcMesh->RegisterComponent();
 	}
 
+	if (!CollMesh)
+	{
+		CollMesh = NewObject<UProceduralMeshComponent>(Owner, TEXT("DG_VoxelColl"));
+		CollMesh->SetupAttachment(Root);
+		CollMesh->SetAbsolute(true, true, true);
+		CollMesh->SetVisibility(false);
+		CollMesh->SetHiddenInGame(true);
+		CollMesh->SetCastShadow(false);
+		CollMesh->bUseAsyncCooking = true;
+		CollMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		CollMesh->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+		Owner->AddInstanceComponent(CollMesh);
+		CollMesh->RegisterComponent();
+	}
+
+	ProcMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ProcMesh->SetWorldTransform(GridToWorld);
+	CollMesh->SetWorldTransform(GridToWorld);
 	return true;
 }
 
@@ -343,7 +358,7 @@ void UDG_VoxelComponent::FlushDirtyMesh()
 	}
 
 	const FVoxelIntBox& Box = DigDirty->GetBox();
-	RebuildDirtyRegion(Box.Min.X, Box.Min.Y, Box.Min.Z, Box.Max.X - 1, Box.Max.Y - 1, Box.Max.Z - 1, true);
+	RebuildDirtyRegion(Box.Min.X, Box.Min.Y, Box.Min.Z, Box.Max.X - 1, Box.Max.Y - 1, Box.Max.Z - 1);
 	DigDirty->Reset();
 	RemeshAccumulator = 0.f;
 }
@@ -401,18 +416,28 @@ void UDG_VoxelComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 
 	const float Dur = FMath::Max(0.01f, DigDuration);
+	const float Hz = FMath::Max(1.f, GDG_VoxelRemeshHz);
+	RemeshAccumulator += DeltaTime;
+	const bool bRemeshDue = RemeshAccumulator >= 1.f / Hz;
+
+	bool bAnyDone = false;
 	for (int32 I = PendingDigs.Num() - 1; I >= 0; --I)
 	{
 		FDigStroke& S = PendingDigs[I];
 		S.Age += DeltaTime;
 		const float T = FMath::Clamp(S.Age / Dur, 0.f, 1.f);
-		const float CurrR = S.TargetR * FMath::SmoothStep(0.f, 1.f, T);
-		const FVoxelFalloff Falloff(DGVoxel::ClampFalloffType(S.FalloffType), S.FalloffAmount);
-		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, CurrR, Falloff, DigRemovedSeeds, *DigDirty, S.Strength);
-		S.PrevR = CurrR;
-		if (T >= 1.f)
+		const bool bDone = T >= 1.f;
+		if (bRemeshDue || bDone)
+		{
+			const float CurrR = S.TargetR * FMath::SmoothStep(0.f, 1.f, T);
+			const FVoxelFalloff Falloff(DGVoxel::ClampFalloffType(S.FalloffType), S.FalloffAmount);
+			Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, CurrR, Falloff, DigRemovedSeeds, *DigDirty, S.Strength);
+			S.PrevR = CurrR;
+		}
+		if (bDone)
 		{
 			PendingDigs.RemoveAtSwap(I);
+			bAnyDone = true;
 		}
 	}
 
@@ -422,14 +447,7 @@ void UDG_VoxelComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
-	if (!DigDirty || !DigDirty->IsValid())
-	{
-		return;
-	}
-
-	const float Hz = FMath::Max(1.f, GDG_VoxelRemeshHz);
-	RemeshAccumulator += DeltaTime;
-	if (RemeshAccumulator >= 1.f / Hz)
+	if ((bRemeshDue || bAnyDone) && DigDirty && DigDirty->IsValid())
 	{
 		FlushDirtyMesh();
 	}
@@ -477,7 +495,74 @@ void UDG_VoxelComponent::BuildChunkMesh(int32 Cx, int32 Cy, int32 Cz, FChunkMesh
 		Out.Verts, Out.Tris, Out.Normals, Out.UV0, Out.Tangents);
 }
 
-void UDG_VoxelComponent::UploadChunkMesh(const FChunkMeshBuild& Built, bool bCollision)
+void UDG_VoxelComponent::BuildCollChunkMesh(int32 Cx, int32 Cy, int32 Cz, FChunkMeshBuild& Out) const
+{
+	Out.Cx = Cx;
+	Out.Cy = Cy;
+	Out.Cz = Cz;
+	Out.Verts.Reset();
+	Out.Tris.Reset();
+	Out.Normals.Reset();
+	Out.UV0.Reset();
+	Out.Tangents.Reset();
+
+	if (Grid->NumBits() <= 0)
+	{
+		return;
+	}
+
+	const int32 Step = FMath::Max(1, GDG_VoxelCollisionStep);
+	const int32 DimX = Grid->DimX;
+	const int32 DimY = Grid->DimY;
+	const int32 DimZ = Grid->DimZ;
+	const float CollVS = Grid->VoxelSize * Step;
+
+	const int32 FineX0 = Cx * ChunkSize;
+	const int32 FineY0 = Cy * ChunkSize;
+	const int32 FineZ0 = Cz * ChunkSize;
+	const int32 FineX1 = FMath::Min((Cx + 1) * ChunkSize, DimX);
+	const int32 FineY1 = FMath::Min((Cy + 1) * ChunkSize, DimY);
+	const int32 FineZ1 = FMath::Min((Cz + 1) * ChunkSize, DimZ);
+
+	const int32 CellX0 = (Cx == 0) ? -1 : FineX0 / Step;
+	const int32 CellY0 = (Cy == 0) ? -1 : FineY0 / Step;
+	const int32 CellZ0 = (Cz == 0) ? -1 : FineZ0 / Step;
+	const int32 CellX1 = (FineX1 + Step - 1) / Step;
+	const int32 CellY1 = (FineY1 + Step - 1) / Step;
+	const int32 CellZ1 = (FineZ1 + Step - 1) / Step;
+
+	const int32 Estimate = ChunkSize * ChunkSize * ChunkSize * 3 / (Step * Step * Step);
+	Out.Verts.Reserve(Estimate);
+	Out.Tris.Reserve(Estimate);
+	Out.Normals.Reserve(Estimate);
+	Out.UV0.Reserve(Estimate);
+
+	const FVector SampleOrigin = Grid->Origin + FVector(CollVS * 0.5f);
+	DGVoxelTV::EmitChunk(
+		CellX0, CellY0, CellZ0, CellX1, CellY1, CellZ1,
+		CollVS, SampleOrigin,
+		[this, Step](int32 CX, int32 CY, int32 CZ) -> float
+		{
+			float MaxD = 0.f;
+			const int32 FX0 = CX * Step;
+			const int32 FY0 = CY * Step;
+			const int32 FZ0 = CZ * Step;
+			for (int32 Z = 0; Z < Step; ++Z)
+			{
+				for (int32 Y = 0; Y < Step; ++Y)
+				{
+					for (int32 X = 0; X < Step; ++X)
+					{
+						MaxD = FMath::Max(MaxD, Grid->GetDensity(FX0 + X, FY0 + Y, FZ0 + Z));
+					}
+				}
+			}
+			return MaxD;
+		},
+		Out.Verts, Out.Tris, Out.Normals, Out.UV0, Out.Tangents);
+}
+
+void UDG_VoxelComponent::UploadChunkMesh(const FChunkMeshBuild& Built)
 {
 	if (!ProcMesh)
 	{
@@ -500,35 +585,65 @@ void UDG_VoxelComponent::UploadChunkMesh(const FChunkMeshBuild& Built, bool bCol
 		Built.UV0,
 		EmptyColors,
 		Built.Tangents,
-		bCollision);
+		false);
 	ApplySectionMaterial(Section);
 }
 
-void UDG_VoxelComponent::RebuildChunks(const TArray<FIntVector>& ChunkCoords, bool bCollision)
+void UDG_VoxelComponent::UploadCollChunkMesh(const FChunkMeshBuild& Built)
 {
-	VOXEL_FUNCTION_COUNTER();
-
-	if (ChunkCoords.Num() == 0 || !ProcMesh)
+	if (!CollMesh)
 	{
 		return;
 	}
 
-	TArray<FChunkMeshBuild> Built;
-	Built.SetNum(ChunkCoords.Num());
+	const int32 Section = ChunkSectionIndex(Built.Cx, Built.Cy, Built.Cz);
+	if (Built.Verts.Num() == 0)
+	{
+		CollMesh->ClearMeshSection(Section);
+		return;
+	}
+
+	static const TArray<FColor> EmptyColors;
+	CollMesh->CreateMeshSection(
+		Section,
+		Built.Verts,
+		Built.Tris,
+		Built.Normals,
+		Built.UV0,
+		EmptyColors,
+		Built.Tangents,
+		true);
+}
+
+void UDG_VoxelComponent::RebuildChunks(const TArray<FIntVector>& ChunkCoords)
+{
+	VOXEL_FUNCTION_COUNTER();
+
+	if (ChunkCoords.Num() == 0 || !ProcMesh || !CollMesh)
+	{
+		return;
+	}
+
+	TArray<FChunkMeshBuild> Visual;
+	TArray<FChunkMeshBuild> Collision;
+	Visual.SetNum(ChunkCoords.Num());
+	Collision.SetNum(ChunkCoords.Num());
 
 	DGVoxel::ForIndices(ChunkCoords.Num(), GDG_VoxelParallelRemesh, [&](int32 Index)
 	{
 		const FIntVector& C = ChunkCoords[Index];
-		BuildChunkMesh(C.X, C.Y, C.Z, Built[Index]);
+		BuildChunkMesh(C.X, C.Y, C.Z, Visual[Index]);
+		BuildCollChunkMesh(C.X, C.Y, C.Z, Collision[Index]);
 	});
 
-	for (const FChunkMeshBuild& Chunk : Built)
+	for (int32 I = 0; I < ChunkCoords.Num(); ++I)
 	{
-		UploadChunkMesh(Chunk, bCollision);
+		UploadChunkMesh(Visual[I]);
+		UploadCollChunkMesh(Collision[I]);
 	}
 }
 
-void UDG_VoxelComponent::RebuildDirtyRegion(int32 X0, int32 Y0, int32 Z0, int32 X1, int32 Y1, int32 Z1, bool bCollision)
+void UDG_VoxelComponent::RebuildDirtyRegion(int32 X0, int32 Y0, int32 Z0, int32 X1, int32 Y1, int32 Z1)
 {
 	if (!EnsureProcMesh() || Grid->NumBits() <= 0)
 	{
@@ -561,7 +676,7 @@ void UDG_VoxelComponent::RebuildDirtyRegion(int32 X0, int32 Y0, int32 Z0, int32 
 			}
 		}
 	}
-	RebuildChunks(Chunks, bCollision);
+	RebuildChunks(Chunks);
 }
 
 void UDG_VoxelComponent::RebuildMesh()
@@ -572,6 +687,7 @@ void UDG_VoxelComponent::RebuildMesh()
 	}
 
 	ProcMesh->ClearAllMeshSections();
+	CollMesh->ClearAllMeshSections();
 
 	const int32 NX = NumChunks(Grid->DimX);
 	const int32 NY = NumChunks(Grid->DimY);
@@ -588,7 +704,7 @@ void UDG_VoxelComponent::RebuildMesh()
 			}
 		}
 	}
-	RebuildChunks(Chunks, true);
+	RebuildChunks(Chunks);
 }
 
 int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius, float Strength)

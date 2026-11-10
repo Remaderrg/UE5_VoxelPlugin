@@ -33,7 +33,7 @@ public:
 
 	/** Seconds for dig radius to grow 0 → target (smooth mesh deformation). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DG|Voxel", meta = (ClampMin = "0.01"))
-	float DigDuration = 0.2f;
+	float DigDuration = 0.05f;
 
 	/** Last successful Load/Save slot; Save uses this when SlotName pin is empty. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DG|Voxel")
@@ -94,6 +94,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> ProcMesh = nullptr;
 
+	/** Hidden; always bCreateCollision=true. Coarser than ProcMesh via CollisionStep. */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> CollMesh = nullptr;
+
 	TArray<FDigStroke> PendingDigs;
 	TArray<FIntVector> DigRemovedSeeds;
 	/** Heap-allocated — FVoxelOptionalIntBox lives in VoxelMinimal (not UHT-safe). */
@@ -107,9 +111,11 @@ private:
 	bool EnsureProcMesh();
 	bool VoxelizeStaticMesh(UStaticMesh* StaticMesh);
 	void BuildChunkMesh(int32 Cx, int32 Cy, int32 Cz, FChunkMeshBuild& Out) const;
-	void UploadChunkMesh(const FChunkMeshBuild& Built, bool bCollision);
-	void RebuildChunks(const TArray<FIntVector>& ChunkCoords, bool bCollision);
-	void RebuildDirtyRegion(int32 X0, int32 Y0, int32 Z0, int32 X1, int32 Y1, int32 Z1, bool bCollision);
+	void BuildCollChunkMesh(int32 Cx, int32 Cy, int32 Cz, FChunkMeshBuild& Out) const;
+	void UploadChunkMesh(const FChunkMeshBuild& Built);
+	void UploadCollChunkMesh(const FChunkMeshBuild& Built);
+	void RebuildChunks(const TArray<FIntVector>& ChunkCoords);
+	void RebuildDirtyRegion(int32 X0, int32 Y0, int32 Z0, int32 X1, int32 Y1, int32 Z1);
 	void RebuildMesh();
 	void HideSourceMesh();
 	void CacheVoxelMaterial();

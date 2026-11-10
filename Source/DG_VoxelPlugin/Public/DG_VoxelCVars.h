@@ -14,3 +14,4 @@ DG_VOXELPLUGIN_API extern float GDG_VoxelCarveThreshold;
 DG_VOXELPLUGIN_API extern bool GDG_VoxelParallelMake;
 DG_VOXELPLUGIN_API extern bool GDG_VoxelParallelRemesh;
 DG_VOXELPLUGIN_API extern float GDG_VoxelRemeshHz;
+DG_VOXELPLUGIN_API extern int32 GDG_VoxelCollisionStep;

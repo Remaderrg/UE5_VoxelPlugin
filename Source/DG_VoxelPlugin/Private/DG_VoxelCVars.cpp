@@ -14,7 +14,7 @@ VOXEL_CONSOLE_VARIABLE(
 	"Default min cluster size used when Make Voxel passes the library default");
 
 VOXEL_CONSOLE_VARIABLE(
-	DG_VOXELPLUGIN_API, float, GDG_VoxelDefaultDigDuration, 0.2f,
+	DG_VOXELPLUGIN_API, float, GDG_VoxelDefaultDigDuration, 0.05f,
 	"dg.voxel.DefaultDigDuration",
 	"Default dig duration (seconds) applied on Make");
 
@@ -44,6 +44,11 @@ VOXEL_CONSOLE_VARIABLE(
 	"Use Voxel::ParallelFor for chunk mesh generation (respects voxel.NoAsync)");
 
 VOXEL_CONSOLE_VARIABLE(
-	DG_VOXELPLUGIN_API, float, GDG_VoxelRemeshHz, 10.f,
+	DG_VOXELPLUGIN_API, float, GDG_VoxelRemeshHz, 5.f,
 	"dg.voxel.RemeshHz",
-	"Max remesh rate during dig (Hz); always with collision");
+	"Max remesh/carve rate during dig (Hz)");
+
+VOXEL_CONSOLE_VARIABLE(
+	DG_VOXELPLUGIN_API, int32, GDG_VoxelCollisionStep, 2,
+	"dg.voxel.CollisionStep",
+	"Collision mesh downsample vs visual (1=same, 2+=coarser/faster cook)");

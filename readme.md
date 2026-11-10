@@ -5,8 +5,8 @@ StaticMesh voxelization plugin: radius digging, small-cluster culling, `.voxel` 
 **Backend:** [VoxelCore](https://github.com/VoxelPlugin/VoxelCore) — density, bit array, falloff, Transvoxel, ParallelFor, ZipReader (legacy load), Project Settings.
 
 - Make: surface → dilate → solid fill → density 0/1
-- Dig: falloff carve on Tick (`DigDuration`); remesh ≤ `RemeshHz` (always with collision)
-- Mesh: Transvoxel
+- Dig: falloff carve coalesced to `RemeshHz` / stroke end (`DigDuration`); visual + collision remesh together
+- Mesh: Transvoxel visual; hidden CollMesh with `CollisionStep` (coarser, always collision)
 - Save: flush pending dig → **raw float Density** (no Oodle); Load reads v3 density (+ InitialSolidCount) + legacy v2/v1
 
 ## Dependencies
@@ -31,7 +31,8 @@ WinterGame/Plugins/
 | `dg.voxel.CarveThreshold` | density solid/air threshold for dig (default 0.5) |
 | `dg.voxel.ParallelMake` | ParallelFor during voxelize |
 | `dg.voxel.ParallelRemesh` | ParallelFor chunk generation |
-| `dg.voxel.RemeshHz` | max remesh rate while digging (default 10; always with collision) |
+| `dg.voxel.RemeshHz` | max remesh/carve rate while digging (default 5) |
+| `dg.voxel.CollisionStep` | collision downsample vs visual (default 2; 1 = same) |
 | `voxel.NoAsync` | (VoxelCore) force single thread |
 
 ## Blueprint
