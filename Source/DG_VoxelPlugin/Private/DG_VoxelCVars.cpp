@@ -31,7 +31,7 @@ VOXEL_CONSOLE_VARIABLE(
 VOXEL_CONSOLE_VARIABLE(
 	DG_VOXELPLUGIN_API, float, GDG_VoxelCarveThreshold, 0.5f,
 	"dg.voxel.CarveThreshold",
-	"Falloff weight threshold to remove a solid voxel (0..1)");
+	"Density solid/air threshold for dig occupancy (0..1; default 0.5 = IsoLevel)");
 
 VOXEL_CONSOLE_VARIABLE(
 	DG_VOXELPLUGIN_API, bool, GDG_VoxelParallelMake, true,
@@ -44,6 +44,6 @@ VOXEL_CONSOLE_VARIABLE(
 	"Use Voxel::ParallelFor for chunk mesh generation (respects voxel.NoAsync)");
 
 VOXEL_CONSOLE_VARIABLE(
-	DG_VOXELPLUGIN_API, float, GDG_VoxelRemeshHz, 20.f,
+	DG_VOXELPLUGIN_API, float, GDG_VoxelRemeshHz, 10.f,
 	"dg.voxel.RemeshHz",
-	"Max visual remesh rate during dig (Hz); collision remesh always at stroke end");
+	"Max remesh rate during dig (Hz); always with collision");

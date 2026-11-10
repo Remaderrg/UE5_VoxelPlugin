@@ -71,5 +71,5 @@ public:
 		ClampMin = "1.0", ClampMax = "120.0",
 		ConsoleVariable = "dg.voxel.RemeshHz",
 		DisplayName = "Dig Remesh Hz"))
-	float RemeshHz = 20.f;
+	float RemeshHz = 5.f;
 };

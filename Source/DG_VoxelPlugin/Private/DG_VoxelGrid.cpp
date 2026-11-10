@@ -1,6 +1,7 @@
 // Copyright Demar Games. All Rights Reserved.
 
 #include "DG_VoxelGrid.h"
+#include "DG_VoxelCVars.h"
 
 void FDG_VoxelGrid::Reset(int32 InDimX, int32 InDimY, int32 InDimZ, float InVoxelSize, const FVector& InOrigin)
 {
@@ -287,6 +288,9 @@ int32 FDG_VoxelGrid::CarveFalloffShell(
 	}
 
 	const float CurrRSq = CurrR * CurrR;
+	const float Inner = PrevR * (1.f - Falloff.Amount);
+	const float InnerSq = Inner > 0.f ? Inner * Inner : -1.f;
+	const float SolidThresh = FMath::Clamp(GDG_VoxelCarveThreshold, 0.f, 1.f);
 	int32 X0, Y0, Z0, X1, Y1, Z1;
 	GetRadiusVoxelBounds(CenterLocal, CurrR, X0, Y0, Z0, X1, Y1, Z1);
 
@@ -305,7 +309,7 @@ int32 FDG_VoxelGrid::CarveFalloffShell(
 				}
 
 				const float DistSq = FVector::DistSquared(VoxelCenterLocal(X, Y, Z), CenterLocal);
-				if (DistSq > CurrRSq)
+				if (DistSq > CurrRSq || (InnerSq >= 0.f && DistSq <= InnerSq))
 				{
 					continue;
 				}
@@ -329,8 +333,8 @@ int32 FDG_VoxelGrid::CarveFalloffShell(
 				}
 
 				OutDirty += FIntVector(X, Y, Z);
-				const bool WasSolid = Old >= 0.5f;
-				const bool IsSolid = D >= 0.5f;
+				const bool WasSolid = Old >= SolidThresh;
+				const bool IsSolid = D >= SolidThresh;
 				Occupancy[I] = IsSolid;
 				if (WasSolid && !IsSolid)
 				{
