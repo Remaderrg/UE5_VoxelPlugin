@@ -53,11 +53,11 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	bool BuildFromMesh(UStaticMeshComponent* Mesh, float InVoxelSize, int32 InMinCluster);
-	int32 DigAtWorld(const FVector& WorldLocation, float Radius, float Strength = 1.f);
+	int32 DigAtWorld(const FVector& WorldLocation, float Radius, float Strength = 1.f, bool bSnapCenterToSolid = false);
 	bool SaveToSlot(const FString& SlotName);
 	bool LoadFromSlot(const FString& SlotName);
 
-	/** Shared Dig/Search query: Occupancy in sphere, Radius + VoxelSize. */
+	/** Shared Dig/Search query: Occupancy in sphere overlapping voxel AABBs (Radius + 0.5*VoxelSize). */
 	int32 QuerySolidInRadiusWorld(const FVector& WorldLocation, float Radius);
 	void GetVoxelInfo(int32& OutAll, int32& OutRemaining) const;
 
@@ -73,6 +73,9 @@ private:
 		uint8 FalloffType = 2;
 		float FalloffAmount = 0.5f;
 		float Strength = 1.f;
+		FVector AnisoScale = FVector::OneVector;
+		FQuat AnisoRot = FQuat::Identity;
+		float EdgeNoise = 0.f;
 	};
 
 	struct FChunkMeshBuild

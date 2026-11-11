@@ -398,7 +398,7 @@ void UDG_VoxelComponent::FlushPendingDigsImmediate()
 	for (FDigStroke& S : PendingDigs)
 	{
 		const FVoxelFalloff Falloff(DGVoxel::ClampFalloffType(S.FalloffType), S.FalloffAmount);
-		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, S.TargetR, Falloff, DigRemovedSeeds, *DigDirty, S.Strength);
+		Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, S.TargetR, Falloff, DigRemovedSeeds, *DigDirty, S.Strength, S.AnisoScale, S.AnisoRot, S.EdgeNoise);
 		S.PrevR = S.TargetR;
 	}
 	PendingDigs.Reset();
@@ -431,7 +431,7 @@ void UDG_VoxelComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		{
 			const float CurrR = S.TargetR * FMath::SmoothStep(0.f, 1.f, T);
 			const FVoxelFalloff Falloff(DGVoxel::ClampFalloffType(S.FalloffType), S.FalloffAmount);
-			Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, CurrR, Falloff, DigRemovedSeeds, *DigDirty, S.Strength);
+			Grid->CarveFalloffShell(S.CenterLocal, S.PrevR, CurrR, Falloff, DigRemovedSeeds, *DigDirty, S.Strength, S.AnisoScale, S.AnisoRot, S.EdgeNoise);
 			S.PrevR = CurrR;
 		}
 		if (bDone)
@@ -707,7 +707,7 @@ void UDG_VoxelComponent::RebuildMesh()
 	RebuildChunks(Chunks);
 }
 
-int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius, float Strength)
+int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius, float Strength, bool bSnapCenterToSolid)
 {
 	if (!Grid || Grid->NumBits() <= 0)
 	{
@@ -719,7 +719,51 @@ int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius,
 		return 0;
 	}
 
-	const int32 Estimate = QuerySolidInRadiusWorld(WorldLocation, Radius);
+	const FVector HitLocal = GridToWorld.InverseTransformPosition(WorldLocation);
+	FVector CenterLocal = HitLocal;
+	float DigR = Radius + VoxelSize * 0.5f;
+	FVector AnisoScale = FVector::OneVector;
+	FQuat AnisoRot = FQuat::Identity;
+	float EdgeNoise = 0.f;
+	if (bSnapCenterToSolid)
+	{
+		const float SearchR = Radius + VoxelSize * 0.5f * FMath::Max(1, GDG_VoxelCollisionStep);
+		if (!Grid->SnapCenterToSolid(CenterLocal, SearchR))
+		{
+			return 0;
+		}
+		const FVector Snapped = CenterLocal;
+		// Spread on surface (avoid shaft when standing still) + soft rim.
+		FVector Inward = (Snapped - HitLocal).GetSafeNormal();
+		if (Inward.IsNearlyZero())
+		{
+			Inward = FMath::VRand();
+		}
+		FVector Side = FVector::CrossProduct(Inward, FMath::VRand()).GetSafeNormal();
+		if (Side.IsNearlyZero())
+		{
+			Side = FVector::CrossProduct(Inward, FVector::UpVector).GetSafeNormal();
+		}
+		const FVector Side2 = FVector::CrossProduct(Inward, Side);
+		CenterLocal = Snapped
+			+ Side * (DigR * FMath::FRandRange(-0.55f, 0.55f))
+			+ Side2 * (DigR * FMath::FRandRange(-0.55f, 0.55f))
+			+ Inward * (VoxelSize * FMath::FRandRange(0.f, 0.35f));
+		DigR *= FMath::FRandRange(0.75f, 1.05f);
+		AnisoScale = FVector(
+			FMath::FRandRange(0.65f, 1.f),
+			FMath::FRandRange(0.65f, 1.f),
+			FMath::FRandRange(0.65f, 1.f));
+		AnisoRot = FMath::VRand().ToOrientationQuat();
+		EdgeNoise = FMath::FRandRange(0.14f, 0.26f);
+		if (Grid->CountSolidInRadius(CenterLocal, DigR) <= 0)
+		{
+			CenterLocal = Snapped;
+			DigR = Radius + VoxelSize * 0.5f;
+		}
+	}
+
+	const int32 Estimate = Grid->CountSolidInRadius(CenterLocal, DigR);
 	if (Estimate <= 0)
 	{
 		return 0;
@@ -729,11 +773,14 @@ int32 UDG_VoxelComponent::DigAtWorld(const FVector& WorldLocation, float Radius,
 		DGVoxel::ClampFalloffType(GDG_VoxelDigFalloffType),
 		FMath::Clamp(GDG_VoxelDigFalloffAmount, 0.f, 1.f));
 	FDigStroke Stroke;
-	Stroke.CenterLocal = GridToWorld.InverseTransformPosition(WorldLocation);
-	Stroke.TargetR = Radius + VoxelSize;
+	Stroke.CenterLocal = CenterLocal;
+	Stroke.TargetR = DigR;
 	Stroke.FalloffType = static_cast<uint8>(Falloff.Type);
 	Stroke.FalloffAmount = Falloff.Amount;
 	Stroke.Strength = Strength;
+	Stroke.AnisoScale = AnisoScale;
+	Stroke.AnisoRot = AnisoRot;
+	Stroke.EdgeNoise = EdgeNoise;
 	PendingDigs.Add(Stroke);
 	SetComponentTickEnabled(true);
 	return Estimate;
@@ -935,7 +982,7 @@ int32 UDG_VoxelComponent::QuerySolidInRadiusWorld(const FVector& WorldLocation, 
 	}
 	return Grid->CountSolidInRadius(
 		GridToWorld.InverseTransformPosition(WorldLocation),
-		Radius + VoxelSize);
+		Radius + VoxelSize * 0.5f);
 }
 
 void UDG_VoxelComponent::GetVoxelInfo(int32& OutAll, int32& OutRemaining) const

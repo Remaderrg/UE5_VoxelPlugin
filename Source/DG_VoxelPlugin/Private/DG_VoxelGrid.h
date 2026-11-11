@@ -49,6 +49,22 @@ struct FDG_VoxelGrid
 		return Origin + FVector((X + 0.5f) * VoxelSize, (Y + 0.5f) * VoxelSize, (Z + 0.5f) * VoxelSize);
 	}
 
+	FORCEINLINE FVector ClosestOnVoxel(const FVector& P, int32 X, int32 Y, int32 Z) const
+	{
+		const FVector C = VoxelCenterLocal(X, Y, Z);
+		const float H = VoxelSize * 0.5f;
+		return FVector(
+			FMath::Clamp(P.X, C.X - H, C.X + H),
+			FMath::Clamp(P.Y, C.Y - H, C.Y + H),
+			FMath::Clamp(P.Z, C.Z - H, C.Z + H));
+	}
+
+	/** Squared distance from P to voxel AABB (0 if P is inside the cell). */
+	FORCEINLINE float VoxelDistSq(const FVector& P, int32 X, int32 Y, int32 Z) const
+	{
+		return (ClosestOnVoxel(P, X, Y, Z) - P).SizeSquared();
+	}
+
 	void Reset(int32 InDimX, int32 InDimY, int32 InDimZ, float InVoxelSize, const FVector& InOrigin);
 	void SyncDensityFromOccupancy();
 	void SyncOccupancyFromDensity();
@@ -59,10 +75,13 @@ struct FDG_VoxelGrid
 
 	FORCEINLINE int32 CountSolid() const { return Occupancy.CountSetBits(); }
 
-	/** Solid voxels (Occupancy) whose centers lie within Radius. */
+	/** Solid voxels whose AABB overlaps the sphere. */
 	int32 CountSolidInRadius(const FVector& CenterLocal, float Radius) const;
 
-	/** Subtract falloff delta (CurrR − PrevR). OutRemoved = solid→air; OutDirty = any density change. */
+	/** Move Center onto nearest solid AABB within SearchR (no-op if already overlapping). */
+	bool SnapCenterToSolid(FVector& InOutCenter, float SearchR) const;
+
+	/** Subtract falloff delta (CurrR − PrevR). Aniso = ellipsoid; EdgeNoise = rim warp (0..~0.25 of R). */
 	int32 CarveFalloffShell(
 		const FVector& CenterLocal,
 		float PrevR,
@@ -70,7 +89,10 @@ struct FDG_VoxelGrid
 		const FVoxelFalloff& Falloff,
 		TArray<FIntVector>& OutRemoved,
 		FVoxelOptionalIntBox& OutDirty,
-		float Strength = 1.f);
+		float Strength = 1.f,
+		FVector AnisoScale = FVector::OneVector,
+		FQuat AnisoRot = FQuat::Identity,
+		float EdgeNoise = 0.f);
 
 	bool UnpackBits(const uint8* Packed, int32 PackedBytes, int32 BitCount);
 	void PackDensity(TArray<uint8>& OutPacked) const;

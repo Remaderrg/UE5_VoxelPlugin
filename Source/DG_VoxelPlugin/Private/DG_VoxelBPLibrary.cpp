@@ -122,10 +122,11 @@ int32 UDG_VoxelBPLibrary::DigVoxel(
 	FVector WorldLocation,
 	float Radius,
 	float Strength,
+	bool SnapCenterToSolid,
 	UDG_VoxelComponent* Voxel)
 {
 	UDG_VoxelComponent* Resolved = RequireVoxel(Voxel, WorldContextObject, TEXT("DigVoxel: no voxel — Load or Make first"));
-	return Resolved ? Resolved->DigAtWorld(WorldLocation, Radius, Strength) : 0;
+	return Resolved ? Resolved->DigAtWorld(WorldLocation, Radius, Strength, SnapCenterToSolid) : 0;
 }
 
 bool UDG_VoxelBPLibrary::SaveVoxel(

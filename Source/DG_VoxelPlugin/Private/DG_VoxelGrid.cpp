@@ -248,7 +248,7 @@ int32 FDG_VoxelGrid::CountSolidInRadius(const FVector& CenterLocal, float Radius
 				{
 					continue;
 				}
-				if (FVector::DistSquared(VoxelCenterLocal(X, Y, Z), CenterLocal) <= RadiusSq)
+				if (VoxelDistSq(CenterLocal, X, Y, Z) <= RadiusSq)
 				{
 					++Count;
 				}
@@ -258,19 +258,68 @@ int32 FDG_VoxelGrid::CountSolidInRadius(const FVector& CenterLocal, float Radius
 	return Count;
 }
 
+bool FDG_VoxelGrid::SnapCenterToSolid(FVector& InOutCenter, float SearchR) const
+{
+	if (SearchR <= 0.f || NumBits() <= 0)
+	{
+		return false;
+	}
+
+	const float SearchSq = SearchR * SearchR;
+	int32 X0, Y0, Z0, X1, Y1, Z1;
+	GetRadiusVoxelBounds(InOutCenter, SearchR, X0, Y0, Z0, X1, Y1, Z1);
+
+	float BestSq = SearchSq;
+	int32 BX = INDEX_NONE, BY = INDEX_NONE, BZ = INDEX_NONE;
+	for (int32 Z = Z0; Z <= Z1; ++Z)
+	{
+		for (int32 Y = Y0; Y <= Y1; ++Y)
+		{
+			for (int32 X = X0; X <= X1; ++X)
+			{
+				if (!Occupancy[IndexOf(X, Y, Z)])
+				{
+					continue;
+				}
+				const float DistSq = VoxelDistSq(InOutCenter, X, Y, Z);
+				if (DistSq > SearchSq || DistSq > BestSq)
+				{
+					continue;
+				}
+				BestSq = DistSq;
+				BX = X;
+				BY = Y;
+				BZ = Z;
+				if (BestSq <= 0.f)
+				{
+					return true;
+				}
+			}
+		}
+	}
+	if (BX == INDEX_NONE)
+	{
+		return false;
+	}
+
+	InOutCenter = ClosestOnVoxel(InOutCenter, BX, BY, BZ);
+	return true;
+}
+
 void FDG_VoxelGrid::GetRadiusVoxelBounds(
 	const FVector& CenterLocal,
 	float Radius,
 	int32& OutX0, int32& OutY0, int32& OutZ0,
 	int32& OutX1, int32& OutY1, int32& OutZ1) const
 {
+	const float R = Radius + VoxelSize * 0.5f;
 	const float InvVS = 1.f / VoxelSize;
-	OutX0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X - Radius - Origin.X) * InvVS), 0, DimX - 1);
-	OutY0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y - Radius - Origin.Y) * InvVS), 0, DimY - 1);
-	OutZ0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z - Radius - Origin.Z) * InvVS), 0, DimZ - 1);
-	OutX1 = FMath::Clamp(FMath::CeilToInt((CenterLocal.X + Radius - Origin.X) * InvVS) - 1, 0, DimX - 1);
-	OutY1 = FMath::Clamp(FMath::CeilToInt((CenterLocal.Y + Radius - Origin.Y) * InvVS) - 1, 0, DimY - 1);
-	OutZ1 = FMath::Clamp(FMath::CeilToInt((CenterLocal.Z + Radius - Origin.Z) * InvVS) - 1, 0, DimZ - 1);
+	OutX0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.X - R - Origin.X) * InvVS), 0, DimX - 1);
+	OutY0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Y - R - Origin.Y) * InvVS), 0, DimY - 1);
+	OutZ0 = FMath::Clamp(FMath::FloorToInt((CenterLocal.Z - R - Origin.Z) * InvVS), 0, DimZ - 1);
+	OutX1 = FMath::Clamp(FMath::CeilToInt((CenterLocal.X + R - Origin.X) * InvVS) - 1, 0, DimX - 1);
+	OutY1 = FMath::Clamp(FMath::CeilToInt((CenterLocal.Y + R - Origin.Y) * InvVS) - 1, 0, DimY - 1);
+	OutZ1 = FMath::Clamp(FMath::CeilToInt((CenterLocal.Z + R - Origin.Z) * InvVS) - 1, 0, DimZ - 1);
 }
 
 int32 FDG_VoxelGrid::CarveFalloffShell(
@@ -280,19 +329,22 @@ int32 FDG_VoxelGrid::CarveFalloffShell(
 	const FVoxelFalloff& Falloff,
 	TArray<FIntVector>& OutRemoved,
 	FVoxelOptionalIntBox& OutDirty,
-	float Strength)
+	float Strength,
+	FVector AnisoScale,
+	FQuat AnisoRot,
+	float EdgeNoise)
 {
 	if (CurrR <= PrevR || NumBits() <= 0)
 	{
 		return 0;
 	}
 
-	const float CurrRSq = CurrR * CurrR;
-	const float Inner = PrevR * (1.f - Falloff.Amount);
-	const float InnerSq = Inner > 0.f ? Inner * Inner : -1.f;
+	AnisoScale = AnisoScale.ComponentMax(FVector(0.5f));
+	EdgeNoise = FMath::Clamp(EdgeNoise, 0.f, 0.35f);
+	const float BoundR = CurrR * AnisoScale.GetAbsMax() * (1.f + EdgeNoise);
 	const float SolidThresh = FMath::Clamp(GDG_VoxelCarveThreshold, 0.f, 1.f);
 	int32 X0, Y0, Z0, X1, Y1, Z1;
-	GetRadiusVoxelBounds(CenterLocal, CurrR, X0, Y0, Z0, X1, Y1, Z1);
+	GetRadiusVoxelBounds(CenterLocal, BoundR, X0, Y0, Z0, X1, Y1, Z1);
 
 	int32 Removed = 0;
 	for (int32 Z = Z0; Z <= Z1; ++Z)
@@ -308,13 +360,18 @@ int32 FDG_VoxelGrid::CarveFalloffShell(
 					continue;
 				}
 
-				const float DistSq = FVector::DistSquared(VoxelCenterLocal(X, Y, Z), CenterLocal);
-				if (DistSq > CurrRSq || (InnerSq >= 0.f && DistSq <= InnerSq))
+				const FVector Local = AnisoRot.UnrotateVector(ClosestOnVoxel(CenterLocal, X, Y, Z) - CenterLocal);
+				float Dist = FVector(Local.X / AnisoScale.X, Local.Y / AnisoScale.Y, Local.Z / AnisoScale.Z).Size();
+				if (EdgeNoise > 0.f)
+				{
+					const float N = FMath::Frac(FMath::Sin(X * 12.9898f + Y * 78.233f + Z * 37.719f) * 43758.5453f);
+					Dist += (N * 2.f - 1.f) * CurrR * EdgeNoise;
+				}
+				if (Dist > CurrR)
 				{
 					continue;
 				}
 
-				const float Dist = FMath::Sqrt(DistSq);
 				const float CurrW = FVoxelFalloff::GetFalloff(Falloff.Type, Dist, CurrR, Falloff.Amount);
 				const float PrevW = PrevR <= 0.f
 					? 0.f

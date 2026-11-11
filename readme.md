@@ -63,7 +63,7 @@ After signature changes: **re-wire the nodes** in BP (Compile). Remove old **Mak
 
 ### Dig + Save
 
-1. **Dig Voxel** (WorldLocation, Radius, Strength) — Voxel pin optional. Return = solid count in sphere (`Radius + VoxelSize`, Occupancy); falloff applies only to carve mesh. Strength scales density removal (default 1).
+1. **Dig Voxel** (WorldLocation, Radius, Strength, SnapCenterToSolid=false) — Voxel pin optional. If SnapCenterToSolid: snap to solid, then scatter on the surface (~±0.55R), random ellipsoid + edge noise (avoids smooth shafts when standing still). Carve/return use cell-overlap sphere (`Radius + 0.5*VoxelSize`). Strength scales density removal (default 1).
 2. **Save Voxel** (SlotName) — Voxel pin optional; empty SlotName uses `ActiveSlot` from last Load/Save.
 
 ### Query

@@ -35,6 +35,7 @@ public:
 		FVector WorldLocation,
 		float Radius = 50.f,
 		float Strength = 1.f,
+		bool SnapCenterToSolid = false,
 		UDG_VoxelComponent* Voxel = nullptr);
 
 	/** Voxel optional — if empty, finds UDG_VoxelComponent on Self (same as Dig). */
