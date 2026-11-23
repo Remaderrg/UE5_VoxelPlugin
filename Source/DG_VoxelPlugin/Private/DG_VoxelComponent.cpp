@@ -191,9 +191,18 @@ void UDG_VoxelComponent::CacheVoxelMaterial()
 
 void UDG_VoxelComponent::ApplySectionMaterial(int32 Section) const
 {
-	if (ProcMesh && VoxelMaterial)
+	if (!VoxelMaterial)
+	{
+		return;
+	}
+	if (ProcMesh)
 	{
 		ProcMesh->SetMaterial(Section, VoxelMaterial);
+	}
+	// Complex coll reads PhysMat from section material (same as SourceMesh slot 0).
+	if (CollMesh)
+	{
+		CollMesh->SetMaterial(Section, VoxelMaterial);
 	}
 }
 
@@ -613,6 +622,7 @@ void UDG_VoxelComponent::UploadCollChunkMesh(const FChunkMeshBuild& Built)
 		EmptyColors,
 		Built.Tangents,
 		true);
+	ApplySectionMaterial(Section);
 }
 
 void UDG_VoxelComponent::RebuildChunks(const TArray<FIntVector>& ChunkCoords)

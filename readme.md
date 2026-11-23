@@ -6,7 +6,7 @@ StaticMesh voxelization plugin: radius digging, small-cluster culling, `.voxel` 
 
 - Make: surface → dilate → solid fill → density 0/1
 - Dig: falloff carve coalesced to `RemeshHz` / stroke end (`DigDuration`); visual + collision remesh together
-- Mesh: Transvoxel visual; hidden CollMesh with `CollisionStep` (coarser, always collision)
+- Mesh: Transvoxel visual; hidden CollMesh with `CollisionStep` (coarser, always collision); both use SourceMesh slot 0 material → PhysMat on hits
 - Save: flush pending dig → **raw float Density** (no Oodle); Load reads v3 density (+ InitialSolidCount) + legacy v2/v1
 
 ## Dependencies

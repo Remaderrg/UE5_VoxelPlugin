@@ -46,7 +46,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "DG|Voxel")
 	TObjectPtr<UStaticMeshComponent> SourceMesh = nullptr;
 
-	/** Cached from SourceMesh at Make — ProcMesh sections use this. */
+	/** Cached from SourceMesh slot 0 — ProcMesh + CollMesh (PhysMat via complex coll). */
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "DG|Voxel")
 	TObjectPtr<UMaterialInterface> VoxelMaterial = nullptr;
 
